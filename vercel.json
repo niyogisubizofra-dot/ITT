@@ -6,7 +6,8 @@
         },
         "backend": {
             "root": "backend",
-            "entrypoint": "server.js"
+            "entrypoint": "server.js",
+            "installCommand": "npm install --legacy-peer-deps"
         }
     },
     "rewrites": [
