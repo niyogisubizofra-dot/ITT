@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: itt-platform
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: node backend/server.js
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://itt-platform.onrender.com
+      - key: CLOUDINARY_CLOUD_NAME
+        value: xsyu1vh0
+      - key: CLOUDINARY_API_KEY
+        value: "399389216355614"
+      - key: CLOUDINARY_API_SECRET
+        value: -HO1drNBZlJ8Vvx9lxr6LfSyK2w
