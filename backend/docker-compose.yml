@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DATABASE_URL=postgresql://neondb_owner:npg_0e6dKOAnoiCa@ep-late-mouse-atth459k-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      - JWT_SECRET=supersecretjwtkey_12345
+      - JWT_REFRESH_SECRET=supersecretjwtrefreshkey_54321
+    volumes:
+      - ./src/uploads:/app/src/uploads
+      - ./backups:/app/backups
