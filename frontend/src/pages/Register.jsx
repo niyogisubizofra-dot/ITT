@@ -34,8 +34,7 @@ const Register = () => {
       await register(formData.username, formData.email, formData.password, formData.referralCode);
       navigate('/dashboard');
     } catch (err) {
-      setError('Mock registration completed.');
-      navigate('/dashboard');
+      setError(err.response?.data?.msg || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -97,16 +97,28 @@ exports.register = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+    const Sequelize = require('sequelize');
+    const { Op } = Sequelize;
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: email.toLowerCase() },
+          Sequelize.where(
+            Sequelize.fn('lower', Sequelize.col('username')),
+            email.toLowerCase()
+          )
+        ]
+      }
+    });
     if (!user) {
-      await logActivity(null, 'Login Failed', req.ip, `Email not found: ${email}`);
-      return res.status(400).json({ msg: 'Invalid Credentials' });
+      await logActivity(null, 'Login Failed', req.ip, `User not found: ${email}`);
+      return res.status(400).json({ msg: 'login failed check your credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       await logActivity(user.id, 'Login Failed', req.ip, 'Incorrect password');
-      return res.status(400).json({ msg: 'Invalid Credentials' });
+      return res.status(400).json({ msg: 'login failed check your credentials' });
     }
 
     // Check if 2FA is active

@@ -111,7 +111,7 @@ describe('Authentication API Endpoints', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.msg).toBe('Invalid Credentials');
+      expect(res.body.msg).toBe('login failed check your credentials');
     });
   });
 });

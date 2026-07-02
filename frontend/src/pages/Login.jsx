@@ -30,7 +30,7 @@ const Login = () => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError('Mock login failed. Please try again.');
+      setError(err.response?.data?.msg || 'login failed check your credentials');
     } finally {
       setLoading(false);
     }
@@ -89,7 +89,7 @@ const Login = () => {
                   type="text"
                   required
                   className="input-field pl-10"
-                  placeholder="Email address"
+                  placeholder="Email address or Username"
                   value={formData.email}
                   onChange={handleChange}
                 />

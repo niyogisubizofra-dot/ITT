@@ -9,7 +9,7 @@ const schemas = {
     ref: Joi.string().allow(null, '')
   }),
   login: Joi.object({
-    email: Joi.string().email().required(),
+    email: Joi.string().required(),
     password: Joi.string().required()
   }),
   changePassword: Joi.object({
