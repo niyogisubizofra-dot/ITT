@@ -4,7 +4,7 @@ services:
     env: node
     plan: free
     rootDir: backend
-    buildCommand: npm install --legacy-peer-deps
+    buildCommand: npm install --legacy-peer-deps && npm install --prefix ../frontend --legacy-peer-deps && npm run build --prefix ../frontend
     startCommand: node server.js
     envVars:
       - key: PORT

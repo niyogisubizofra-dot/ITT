@@ -52,6 +52,20 @@ app.use('/api/invest', investRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/chat', chatRoutes);
 
+// Health and status endpoints for deployment checks
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'INVEST backend API',
+    docs: '/api-docs',
+    health: '/health'
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Static directories
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, '../../frontend/dist')));
