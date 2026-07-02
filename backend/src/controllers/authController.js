@@ -48,7 +48,7 @@ exports.register = async (req, res, next) => {
     const unqPrefix = crypto.randomBytes(3).toString('hex').toUpperCase();
     const referralCode = `USER${unqPrefix}`;
 
-    user = await User.create({
+    const user = await User.create({
       username,
       email: email.toLowerCase(),
       password,
