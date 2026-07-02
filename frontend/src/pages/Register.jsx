@@ -34,13 +34,20 @@ const Register = () => {
       await register(formData.username, formData.email, formData.password, formData.referralCode);
       navigate('/dashboard');
     } catch (err) {
-      setError(
-        err.response?.data?.msg ||
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        err.message ||
-        'Registration failed. Please try again.'
-      );
+      const status = err.response?.status;
+      const dataMsg = err.response?.data?.msg || err.response?.data?.error?.message || err.response?.data?.message;
+      let errMsg = '';
+      
+      if (status === 500) {
+        errMsg = `Server Error (500): ${dataMsg || 'Internal Server Error. Please verify your backend server is running and database connection is active.'}`;
+      } else if (status === 400 || status === 401 || status === 403 || status === 404) {
+        errMsg = `Registration Failed: ${dataMsg || 'Request error.'}`;
+      } else if (err.message === 'Network Error' || !err.response) {
+        errMsg = `Connection Failed: Please verify the backend server is running on http://localhost:5000 (Details: ${err.message})`;
+      } else {
+        errMsg = `Error: ${dataMsg || err.message || 'An unexpected error occurred.'}`;
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
