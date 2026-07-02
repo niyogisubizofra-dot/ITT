@@ -6,19 +6,27 @@ axios.defaults.withCredentials = true;
 
 const useAuthStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       activeInvestments: [],
       loading: true,
       
       checkUser: async () => {
+        const currentUser = get().user;
+        if (currentUser) {
+          set({ loading: false });
+        } else {
+          set({ loading: true });
+        }
         try {
           const res = await axios.get('/api/auth/user');
           set({ user: res.data, loading: false });
         } catch (err) {
-          // If network fails, use cached user from storage
-          const storedUser = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.user;
-          set({ user: storedUser || null, loading: false });
+          if (err.response?.status === 401 || err.response?.status === 403 || err.response?.status === 404) {
+            set({ user: null, loading: false });
+          } else {
+            set({ loading: false });
+          }
         }
       },
 

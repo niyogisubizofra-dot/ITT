@@ -25,16 +25,53 @@ const ScrollToTop = () => {
 const ProtectedRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
+  
+  const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
+  if (isAdmin) {
+    return <Navigate to="/admin-dashboard" />;
+  }
+  return children;
+};
+
+const AdminProtectedRoute = ({ children }) => {
+  const user = useAuthStore((state) => state.user);
+  const loading = useAuthStore((state) => state.loading);
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
+  if (!user) return <Navigate to="/login" />;
+  
+  const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" />;
+  }
   return children;
 };
 
 const RegisterProtectedRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (!user) return <Navigate to="/register" />;
+  
+  const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
+  if (isAdmin) {
+    return <Navigate to="/admin-dashboard" />;
+  }
+  return children;
+};
+
+const AuthRoute = ({ children }) => {
+  const user = useAuthStore((state) => state.user);
+  const loading = useAuthStore((state) => state.loading);
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
+  if (user) {
+    const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
+    if (isAdmin) {
+      return <Navigate to="/admin-dashboard" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 };
 
@@ -59,8 +96,8 @@ const AppContent = () => {
               </RegisterProtectedRoute>
             } 
           />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+          <Route path="/register" element={<AuthRoute><Register /></AuthRoute>} />
           <Route 
             path="/dashboard" 
             element={
@@ -72,9 +109,9 @@ const AppContent = () => {
           <Route 
             path="/admin-dashboard" 
             element={
-              <ProtectedRoute>
+              <AdminProtectedRoute>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminProtectedRoute>
             } 
           />
           {/* Catch-all route mapping for any undefined pages */}
