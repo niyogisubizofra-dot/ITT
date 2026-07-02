@@ -30,7 +30,13 @@ const Login = () => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err.response?.data?.msg || 'login failed check your credentials');
+      setError(
+        err.response?.data?.msg ||
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.message ||
+        'login failed check your credentials'
+      );
     } finally {
       setLoading(false);
     }

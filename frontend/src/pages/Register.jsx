@@ -34,7 +34,13 @@ const Register = () => {
       await register(formData.username, formData.email, formData.password, formData.referralCode);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.msg || 'Registration failed. Please try again.');
+      setError(
+        err.response?.data?.msg ||
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.message ||
+        'Registration failed. Please try again.'
+      );
     } finally {
       setLoading(false);
     }

@@ -20,10 +20,20 @@ exports.register = async (req, res, next) => {
   const t = await sequelize.transaction();
 
   try {
-    let user = await User.findOne({ where: { email } }, { transaction: t });
-    if (user) {
+    const { Op } = require('sequelize');
+    let existingUser = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: email.toLowerCase() },
+          { username: username }
+        ]
+      }
+    }, { transaction: t });
+
+    if (existingUser) {
       await t.rollback();
-      return res.status(400).json({ msg: 'User already exists' });
+      const isEmailMatch = existingUser.email.toLowerCase() === email.toLowerCase();
+      return res.status(400).json({ msg: `${isEmailMatch ? 'Email' : 'Username'} already exists` });
     }
 
     let referredById = null;
