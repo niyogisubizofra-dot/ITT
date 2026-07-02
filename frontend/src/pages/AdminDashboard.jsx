@@ -447,11 +447,11 @@ const AdminDashboard = () => {
           )}
 
           {activeTab === 'chat' && (
-            <div className="fade-in h-[calc(100vh-140px)] md:h-[750px] flex flex-col md:flex-row bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
-              <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col bg-slate-50/50 h-[35%] md:h-full">
-                <div className="p-4 md:p-6 border-b border-slate-100 sticky top-0 bg-slate-50/90 backdrop-blur-sm z-10 hidden sm:block">
-                   <h3 className="text-lg sm:text-xl font-black text-slate-800">Messages</h3>
-                   <p className="text-slate-400 text-xs sm:text-sm mt-1">{users.length} Users Listed</p>
+            <div className="fade-in h-[calc(100vh-140px)] md:h-[750px] flex flex-col md:flex-row bg-brand-secondary/40 border border-brand-border/30 rounded-3xl shadow-2xl backdrop-blur-md overflow-hidden">
+              <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-brand-border/20 flex flex-col bg-brand-secondary/20 h-[35%] md:h-full">
+                <div className="p-4 md:p-6 border-b border-brand-border/20 z-10 hidden sm:block">
+                   <h3 className="text-lg sm:text-xl font-black text-brand-text">Messages</h3>
+                   <p className="text-brand-text/50 text-xs sm:text-sm mt-1">{users.length} Users Listed</p>
                 </div>
                 <div className="flex-grow overflow-y-auto flex md:flex-col">
                   {users.map(u => {
@@ -461,16 +461,16 @@ const AdminDashboard = () => {
                       <div 
                         key={u.id} 
                         onClick={() => setSelectedUser(u)}
-                        className={`p-4 sm:p-6 hover:bg-white cursor-pointer transition md:border-l-4 md:border-b-0 border-b-4 ${isSelected ? 'md:border-brand-primary border-brand-primary bg-white min-w-[150px] md:min-w-0 font-bold' : 'border-transparent opacity-60 min-w-[150px] md:min-w-0'}`}
+                        className={`p-4 sm:p-6 hover:bg-brand-secondary/50 cursor-pointer transition md:border-l-4 md:border-b-0 border-b-4 ${isSelected ? 'md:border-brand-primary border-brand-primary bg-brand-secondary/40 min-w-[150px] md:min-w-0 font-bold' : 'border-transparent opacity-60 min-w-[150px] md:min-w-0'}`}
                       >
                         <div className="flex items-center space-x-3">
                            <div className="relative">
-                              <img src={`https://ui-avatars.com/api/?name=${u.username}&background=random&color=fff`} className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl shadow-sm" alt={u.username} />
-                              <div className="absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full border-2 sm:border-4 border-white"></div>
+                              <img src={`https://ui-avatars.com/api/?name=${u.username}&background=random&color=fff`} className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl shadow-md border border-brand-border/30" alt={u.username} />
+                              <div className="absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full border-2 sm:border-4 border-brand-secondary"></div>
                            </div>
                            <div className="min-w-0 flex-grow">
-                              <div className="font-bold text-slate-800 text-sm sm:text-base truncate max-w-[80px] sm:max-w-none">{u.username}</div>
-                              <div className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[80px] sm:max-w-[120px]">
+                              <div className="font-bold text-brand-text text-sm sm:text-base truncate max-w-[80px] sm:max-w-none">{u.username}</div>
+                              <div className="text-[10px] text-brand-text/50 font-bold uppercase truncate max-w-[80px] sm:max-w-[120px]">
                                  {hasMsgs ? `${chatMessages[u.id].length} messages` : u.role}
                               </div>
                            </div>
@@ -483,47 +483,55 @@ const AdminDashboard = () => {
               <div className="flex-grow flex flex-col h-[65%] md:h-full">
                 {selectedUser ? (
                   <>
-                    <div className="px-4 sm:px-8 py-4 sm:py-6 bg-white border-b border-slate-100 flex items-center justify-between">
+                    <div className="px-4 sm:px-8 py-4 sm:py-6 bg-brand-secondary/60 border-b border-brand-border/20 flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                          <div className="relative">
-                            <img src={`https://ui-avatars.com/api/?name=${selectedUser.username}&background=2563eb&color=fff`} className="w-10 h-10 rounded-full" alt={selectedUser.username} />
-                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                            <img src={`https://ui-avatars.com/api/?name=${selectedUser.username}&background=2563eb&color=fff`} className="w-10 h-10 rounded-full border border-brand-border/30 shadow-md" alt={selectedUser.username} />
+                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-brand-secondary"></div>
                          </div>
                          <div>
-                            <span className="font-bold text-slate-800 block text-base sm:text-lg leading-tight">{selectedUser.username}</span>
-                            <span className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest mt-0.5 block">{selectedUser.role} • Active Now</span>
+                            <span className="font-bold text-brand-text block text-base sm:text-lg leading-tight">{selectedUser.username}</span>
+                            <span className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest mt-0.5 block">{selectedUser.role} • Active Now</span>
                          </div>
                       </div>
                       {/* Rich Text Controls */}
-                      <div className="flex space-x-1 bg-slate-50 p-1 rounded-xl">
-                         <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition"><Bold className="w-4 h-4" /></button>
-                         <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition"><Italic className="w-4 h-4" /></button>
-                         <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition"><Link2 className="w-4 h-4" /></button>
+                      <div className="flex space-x-1 bg-brand-dark/40 border border-brand-border/30 p-1 rounded-xl">
+                         <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Bold className="w-4 h-4" /></button>
+                         <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Italic className="w-4 h-4" /></button>
+                         <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Link2 className="w-4 h-4" /></button>
                       </div>
                     </div>
-                    <div className="flex-grow p-4 sm:p-6 space-y-3 bg-slate-50/10 overflow-y-auto flex flex-col font-sans">
+                    <div className="flex-grow p-4 sm:p-6 space-y-3 bg-brand-dark/10 overflow-y-auto flex flex-col font-sans">
                       {chatMessages[selectedUser.id] && chatMessages[selectedUser.id].length > 0 ? (
                         chatMessages[selectedUser.id].map((msg, index) => {
                           const isSelf = msg.senderId === 1;
                           return (
                             <div key={index} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
                               {!isSelf && (
-                                 <img src={`https://ui-avatars.com/api/?name=${msg.senderName}&background=random&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-sm" alt="avatar" />
+                                 <img src={`https://ui-avatars.com/api/?name=${msg.senderName}&background=random&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-md border border-brand-border/30" alt="avatar" />
                               )}
-                              <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-sm ${
+                              <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-md border ${
                                  isSelf 
-                                 ? 'bg-[#0084FF] text-white rounded-br-[4px]' 
-                                 : 'bg-[#E4E6EB] text-[#050505] rounded-bl-[4px]'
+                                 ? 'bg-gradient-to-r from-brand-primary to-brand-accent text-white rounded-br-[4px] border-brand-primary/20' 
+                                 : 'bg-brand-secondary text-brand-text border-brand-border/40 rounded-bl-[4px]'
                               } max-w-[70%]`}>
-                                 {msg.text && <p className="font-normal">{isSelf ? renderMessageText(msg.text) : msg.text}</p>}
+                                 {msg.text && <p className="font-normal">{renderMessageText(msg.text)}</p>}
                                  {msg.image && (
-                                    <div className="mt-1">
-                                       <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer">
-                                          <img src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} alt="Uploaded attachment" className="max-w-[200px] sm:max-w-xs rounded-[14px] shadow-sm hover:scale-[1.01] transition" />
+                                    <div className="mt-2 group relative overflow-hidden rounded-2xl border border-brand-border/30 bg-brand-dark/30 p-1.5 transition-all duration-300 hover:border-brand-primary/50">
+                                       <div className="absolute top-2 left-2 z-10 bg-brand-primary/95 text-white text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shadow-md">
+                                          <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                                          Market Analysis Chart
+                                       </div>
+                                       <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl">
+                                          <img 
+                                             src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} 
+                                             alt="Uploaded chart analysis" 
+                                             className="w-full max-w-[280px] sm:max-w-md object-cover transition-transform duration-500 group-hover:scale-105" 
+                                          />
                                        </a>
                                     </div>
                                  )}
-                                 <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-slate-400'}`}>
+                                 <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-brand-text/50'}`}>
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                  </span>
                               </div>
@@ -531,16 +539,16 @@ const AdminDashboard = () => {
                           );
                         })
                       ) : (
-                        <div className="flex justify-center items-center h-full text-slate-400 font-medium">
+                        <div className="flex justify-center items-center h-full text-brand-text/40 font-medium">
                            No messages exchanged yet. Send a greeting to start.
                         </div>
                       )}
                     </div>
-                    <div className="p-4 bg-white border-t border-slate-100">
-                      <div className="flex items-center space-x-2 bg-[#F0F2F5] p-1.5 rounded-full shadow-inner">
+                    <div className="p-4 bg-brand-secondary/60 border-t border-brand-border/20">
+                      <div className="flex items-center space-x-2 bg-brand-dark/60 border border-brand-border/30 p-1.5 rounded-full shadow-inner">
                          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                         <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-slate-200/60 rounded-full transition text-[#0084FF] relative shrink-0">
-                            {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-[#0084FF]" /> : <Image className="w-5 h-5" />}
+                         <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-brand-secondary/50 rounded-full transition text-brand-accent relative shrink-0">
+                            {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-brand-accent" /> : <Image className="w-5 h-5" />}
                          </button>
 
                          <input 
@@ -548,18 +556,19 @@ const AdminDashboard = () => {
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(chatInput); }}
-                            className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-slate-800 placeholder-slate-400 font-medium w-0 min-w-0" 
-                            placeholder="Aa" 
+                            className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-brand-text placeholder-brand-text/40 font-medium w-0 min-w-0" 
+                            placeholder="Type a message..." 
                          />
-                         <button onClick={() => sendChatMessage(chatInput)} className="text-[#0084FF] p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
+                         <button onClick={() => sendChatMessage(chatInput)} className="text-brand-accent hover:text-brand-primary p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
                             <Send className="w-5 h-5 fill-current" />
                          </button>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-center items-center h-full text-slate-400">
-                     Select a user from the sidebar to start chatting.
+                  <div className="flex flex-col justify-center items-center h-full text-brand-text/40 font-medium p-6 text-center">
+                     <MessageSquare className="w-16 h-16 mb-4 text-brand-text/20 animate-pulse" />
+                     Select a user from the messages list to view conversation history and send trading charts.
                   </div>
                 )}
               </div>

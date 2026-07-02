@@ -601,50 +601,58 @@ const Dashboard = () => {
           )}
 
           {activeTab === 'chat' && (
-            <div className="fade-in h-[calc(100vh-140px)] md:h-[650px] bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col font-sans">
-               <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+            <div className="fade-in h-[calc(100vh-140px)] md:h-[650px] bg-brand-secondary/40 border border-brand-border/30 rounded-3xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-col font-sans">
+               <div className="p-4 md:p-6 border-b border-brand-border/20 flex items-center justify-between bg-brand-secondary/60 backdrop-blur-sm">
                   <div className="flex items-center space-x-3">
                      <div className="relative">
-                        <img src="https://ui-avatars.com/api/?name=Support&background=0084ff&color=fff" className="w-10 h-10 rounded-full shadow-sm" alt="Support avatar" />
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white"></div>
+                        <img src="https://ui-avatars.com/api/?name=Support&background=2563eb&color=fff" className="w-10 h-10 rounded-full shadow-md border border-brand-border/30" alt="Support avatar" />
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-brand-secondary"></div>
                      </div>
                      <div>
-                        <span className="font-bold text-slate-800 block text-base leading-tight">Support Desk</span>
-                        <span className="text-emerald-500 text-[10px] font-black uppercase tracking-widest flex items-center mt-0.5">
+                        <span className="font-bold text-brand-text block text-base leading-tight">Support Desk</span>
+                        <span className="text-emerald-400 text-[10px] font-black uppercase tracking-widest flex items-center mt-0.5">
                            Active Now
                         </span>
                      </div>
                   </div>
                   {/* Rich Text controls */}
-                  <div className="flex items-center space-x-1 sm:space-x-2 bg-slate-50 p-1 rounded-xl">
-                     <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition"><Bold className="w-4 h-4" /></button>
-                     <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition"><Italic className="w-4 h-4" /></button>
-                     <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition"><Link2 className="w-4 h-4" /></button>
+                  <div className="flex items-center space-x-1 sm:space-x-2 bg-brand-dark/40 border border-brand-border/30 p-1 rounded-xl">
+                     <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Bold className="w-4 h-4" /></button>
+                     <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Italic className="w-4 h-4" /></button>
+                     <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Link2 className="w-4 h-4" /></button>
                   </div>
                </div>
                
-               <div className="flex-grow p-4 sm:p-6 space-y-3 overflow-y-auto bg-slate-50/10 flex flex-col">
+               <div className="flex-grow p-4 sm:p-6 space-y-4 overflow-y-auto bg-brand-dark/10 flex flex-col scrollbar-thin">
                   {chatMessages.map((msg, index) => {
                      const isSelf = msg.senderId === user?.id;
                      return (
                         <div key={index} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
                            {!isSelf && (
-                              <img src={`https://ui-avatars.com/api/?name=${msg.senderName}&background=0084ff&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-sm" alt="avatar" />
+                              <img src={`https://ui-avatars.com/api/?name=${msg.senderName}&background=2563eb&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-md border border-brand-border/30" alt="avatar" />
                            )}
-                           <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-sm ${
+                           <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-md border ${
                               isSelf 
-                              ? 'bg-[#0084FF] text-white rounded-br-[4px]' 
-                              : 'bg-[#E4E6EB] text-[#050505] rounded-bl-[4px]'
+                              ? 'bg-gradient-to-r from-brand-primary to-brand-accent text-white rounded-br-[4px] border-brand-primary/20' 
+                              : 'bg-brand-secondary text-brand-text border-brand-border/40 rounded-bl-[4px]'
                            } max-w-[70%]`}>
-                              {msg.text && <p className="font-normal">{isSelf ? renderMessageText(msg.text) : msg.text}</p>}
+                              {msg.text && <p className="font-normal">{renderMessageText(msg.text)}</p>}
                               {msg.image && (
-                                 <div className="mt-1">
-                                    <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer">
-                                       <img src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} alt="Uploaded attachment" className="max-w-[200px] sm:max-w-xs rounded-[14px] shadow-sm hover:scale-[1.01] transition" />
+                                 <div className="mt-2 group relative overflow-hidden rounded-2xl border border-brand-border/30 bg-brand-dark/30 p-1.5 transition-all duration-300 hover:border-brand-primary/50">
+                                    <div className="absolute top-2 left-2 z-10 bg-brand-primary/95 text-white text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shadow-md">
+                                       <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                                       Market Analysis Chart
+                                    </div>
+                                    <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl">
+                                       <img 
+                                          src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} 
+                                          alt="Uploaded chart analysis" 
+                                          className="w-full max-w-[280px] sm:max-w-md object-cover transition-transform duration-500 group-hover:scale-105" 
+                                       />
                                     </a>
                                  </div>
                               )}
-                              <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-slate-400'}`}>
+                              <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-brand-text/50'}`}>
                                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                            </div>
@@ -653,12 +661,12 @@ const Dashboard = () => {
                   })}
                </div>
 
-               <div className="p-4 bg-white border-t border-slate-100">
-                  <div className="flex items-center space-x-2 bg-[#F0F2F5] p-1.5 rounded-full shadow-inner">
+               <div className="p-4 bg-brand-secondary/60 border-t border-brand-border/20">
+                  <div className="flex items-center space-x-2 bg-brand-dark/60 border border-brand-border/30 p-1.5 rounded-full shadow-inner">
                      {/* Image upload button */}
                      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                     <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-slate-200/60 rounded-full transition text-[#0084FF] relative shrink-0">
-                        {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-[#0084FF]" /> : <Image className="w-5 h-5" />}
+                     <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-brand-secondary/50 rounded-full transition text-brand-accent relative shrink-0">
+                        {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-brand-accent" /> : <Image className="w-5 h-5" />}
                      </button>
 
                      <input 
@@ -666,10 +674,10 @@ const Dashboard = () => {
                         value={chatInput} 
                         onChange={(e) => setChatInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(chatInput); }}
-                        className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-slate-800 placeholder-slate-400 font-medium" 
-                        placeholder="Aa" 
+                        className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-brand-text placeholder-brand-text/40 font-medium" 
+                        placeholder="Type a message..." 
                      />
-                     <button onClick={() => sendChatMessage(chatInput)} className="text-[#0084FF] p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
+                     <button onClick={() => sendChatMessage(chatInput)} className="text-brand-accent hover:text-brand-primary p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
                         <Send className="w-5 h-5 fill-current" />
                      </button>
                   </div>
