@@ -16,6 +16,7 @@ const Register = () => {
   
   const register = useAuthStore((state) => state.register);
   const navigate = useNavigate();
+  const backendUrl = import.meta.env.VITE_API_URL || window.location.origin;
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -43,7 +44,7 @@ const Register = () => {
       } else if (status === 400 || status === 401 || status === 403 || status === 404) {
         errMsg = `Registration Failed: ${dataMsg || 'Request error.'}`;
       } else if (err.message === 'Network Error' || !err.response) {
-        errMsg = `Connection Failed: Please verify the backend server is running on http://localhost:5000 (Details: ${err.message})`;
+        errMsg = `Connection Failed: Please verify the backend server is running or VITE_API_URL is set correctly (${backendUrl}). Details: ${err.message}`;
       } else {
         errMsg = `Error: ${dataMsg || err.message || 'An unexpected error occurred.'}`;
       }
