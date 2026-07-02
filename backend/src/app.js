@@ -62,6 +62,14 @@ app.get(/(.*)/, (req, res, next) => {
   if (require('fs').existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
+    // If static files are not present (backend-only mode on Render),
+    // redirect web browser traffic to the Vercel frontend
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads') && !req.path.startsWith('/api-docs')) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      // Remove trailing slash from frontendUrl if present to avoid double slashes
+      const cleanFrontendUrl = frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl;
+      return res.redirect(301, cleanFrontendUrl + req.originalUrl);
+    }
     next();
   }
 });

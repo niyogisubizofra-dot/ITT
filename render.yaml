@@ -3,8 +3,9 @@ services:
     name: itt-platform
     env: node
     plan: free
-    buildCommand: npm run build
-    startCommand: node backend/server.js
+    rootDir: backend
+    buildCommand: npm install --legacy-peer-deps
+    startCommand: node server.js
     envVars:
       - key: PORT
         value: 5000
@@ -15,7 +16,7 @@ services:
       - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://itt-platform.onrender.com
+        value: https://it-t.vercel.app
       - key: CLOUDINARY_CLOUD_NAME
         value: xsyu1vh0
       - key: CLOUDINARY_API_KEY
