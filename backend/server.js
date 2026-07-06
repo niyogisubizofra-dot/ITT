@@ -115,7 +115,7 @@ async function runSeeders() {
 }
 
 // Connect & Sync PostgreSQL, then run seeders and start server
-async function startServer() {
+async function connectDatabase() {
   try {
     await sequelize.authenticate();
     console.log('Database connected successfully.');
@@ -127,15 +127,17 @@ async function startServer() {
 
     // Start background backup jobs
     startBackupJob();
-
-    server.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log(`Swagger documentation is available at http://localhost:${PORT}/api-docs`);
-    });
   } catch (err) {
-    console.error('Server startup failed:', err.message);
-    process.exit(1);
+    console.error('Database initialization failed:', err.message);
+    // Don't exit - server should still run even if DB connection fails initially
   }
 }
 
-startServer();
+// Start listening immediately
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+  console.log(`Swagger documentation is available at http://localhost:${PORT}/api-docs`);
+});
+
+// Try to connect to database asynchronously
+connectDatabase();
