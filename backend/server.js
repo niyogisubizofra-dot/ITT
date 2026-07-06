@@ -1,8 +1,9 @@
 const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./src/app');
-const { sequelize, User, Department, Employee, Revenue, Expense, Budget } = require('./src/models');
+const { sequelize, User, Department, Employee, Client, Revenue, Expense, Budget } = require('./src/models');
 const { initDashboardSocket } = require('./src/sockets/dashboardSocket');
+const bcrypt = require('bcryptjs');
 const { startBackupJob } = require('./src/jobs/backupJob');
 require('dotenv').config();
 
@@ -24,63 +25,89 @@ app.set('io', io);
 async function runSeeders() {
   try {
     // Seed user ishimwe (admin) if not exists
-    const ishimwe = await User.findOne({ where: { username: 'ishimwe' } });
+    let ishimwe = await User.findOne({ where: { username: 'ishimwe' } });
     if (!ishimwe) {
-      await User.create({
+      ishimwe = await User.create({
         username: 'ishimwe',
         email: 'ishimwe@example.com',
         password: '123', // hooks automatically hash this
         role: 'CEO',
         referralCode: 'ISHIMWE_ADMIN',
-        balance: 5000.00
-      });
-      console.log('Admin account ishimwe seeded successfully (ishimwe@example.com / 123)');
-    }
-
-    const userCount = await User.count();
-    if (userCount === 0) {
-      console.log('No user records found. Seeding default accounts...');
-
-      // Seed CEO
-      const ceo = await User.create({
-        username: 'ceo',
-        email: 'ceo@example.com',
-        password: 'password123', // hooks automatically hash this
-        role: 'CEO',
-        referralCode: 'CEOBONUS',
-        balance: 1000.00
-      });
-      console.log('CEO account seeded (ceo@example.com / password123)');
-
-      // Seed Staff
-      const staff = await User.create({
-        username: 'staff_user',
-        email: 'staff@example.com',
-        password: 'password123',
-        role: 'Staff',
-        referralCode: 'STAFFBONUS',
         balance: 0.00
       });
-      console.log('Staff account seeded (staff@example.com / password123)');
+      console.log('Admin account ishimwe seeded successfully (ishimwe@example.com / 123)');
+    } else {
+      // Ensure role is CEO (admin)
+      if (ishimwe.role !== 'CEO') {
+        ishimwe.role = 'CEO';
+        await ishimwe.save();
+      }
+      // Ensure password is 123
+      const isMatch = await bcrypt.compare('123', ishimwe.password);
+      if (!isMatch) {
+        ishimwe.password = '123';
+        await ishimwe.save();
+        console.log('Admin account ishimwe password updated to 123');
+      }
+    }
 
-      // Seed Client
-      const clientUser = await User.create({
-        username: 'client_user',
-        email: 'client@example.com',
-        password: 'password123',
-        role: 'Client',
-        referralCode: 'CLIENTBONUS',
-        balance: 50.00
+    // Ensure Employee profile exists for ishimwe and is Active
+    let ishimweEmployee = await Employee.findOne({ where: { userId: ishimwe.id } });
+    if (!ishimweEmployee) {
+      await Employee.create({
+        userId: ishimwe.id,
+        position: 'CEO',
+        status: 'Active',
+        salary: 0.00
       });
-      console.log('Client account seeded (client@example.com / password123)');
+      console.log('Employee profile for ishimwe created successfully');
+    } else if (ishimweEmployee.status !== 'Active' || ishimweEmployee.position !== 'CEO') {
+      ishimweEmployee.status = 'Active';
+      ishimweEmployee.position = 'CEO';
+      await ishimweEmployee.save();
+      console.log('Employee profile for ishimwe status updated to Active / CEO');
+    }
 
-      // Seed mock finance data to populate dashboard charts
-      await Revenue.create({ amount: 15000.00, category: 'Consulting', date: '2026-05-10', description: 'Initial project revenue' });
-      await Revenue.create({ amount: 20000.00, category: 'Software Licensing', date: '2026-06-15', description: 'Product sales' });
-      await Expense.create({ amount: 4500.00, category: 'Cloud Infrastructure', date: '2026-05-12', description: 'AWS Hosting fees' });
-      await Expense.create({ amount: 12000.00, category: 'Payroll', date: '2026-06-28', description: 'Monthly payroll' });
-      
-      console.log('Default financial metrics seeded.');
+    // Seed user jeremie (client) if not exists
+    let jeremie = await User.findOne({ where: { username: 'jeremie' } });
+    if (!jeremie) {
+      jeremie = await User.create({
+        username: 'jeremie',
+        email: 'jeremie@example.com',
+        password: '123456', // hooks automatically hash this
+        role: 'Client',
+        referralCode: 'JEREMIE_CLIENT',
+        balance: 0.00
+      });
+      console.log('Client account jeremie seeded successfully (jeremie@example.com / 123456)');
+    } else {
+      // Ensure role is Client
+      if (jeremie.role !== 'Client') {
+        jeremie.role = 'Client';
+        await jeremie.save();
+      }
+      // Ensure password is 123456
+      const isMatch = await bcrypt.compare('123456', jeremie.password);
+      if (!isMatch) {
+        jeremie.password = '123456';
+        await jeremie.save();
+        console.log('Client account jeremie password updated to 123456');
+      }
+    }
+
+    // Ensure Client profile exists for jeremie and is Active
+    let jeremieClient = await Client.findOne({ where: { email: 'jeremie@example.com' } });
+    if (!jeremieClient) {
+      await Client.create({
+        name: 'jeremie',
+        email: 'jeremie@example.com',
+        status: 'Active'
+      });
+      console.log('Client profile for jeremie created successfully');
+    } else if (jeremieClient.status !== 'Active') {
+      jeremieClient.status = 'Active';
+      await jeremieClient.save();
+      console.log('Client profile for jeremie status updated to Active');
     }
   } catch (err) {
     console.error('Failed to execute automatic seeders:', err.message);

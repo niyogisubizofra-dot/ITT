@@ -45,17 +45,6 @@ exports.getRevenueChart = async (req, res, next) => {
 
     const data = Object.values(chartMap).sort((a, b) => a.period.localeCompare(b.period));
 
-    // Fallback seed data if DB is empty
-    if (data.length === 0) {
-      data.push(
-        { period: '2026-01', revenue: 15000, expense: 8000 },
-        { period: '2026-02', revenue: 18000, expense: 9500 },
-        { period: '2026-03', revenue: 22000, expense: 11000 },
-        { period: '2026-04', revenue: 25000, expense: 12500 },
-        { period: '2026-05', revenue: 31000, expense: 14000 }
-      );
-    }
-
     res.json(data);
   } catch (err) {
     next(err);
@@ -77,15 +66,6 @@ exports.getProjectPerformance = async (req, res, next) => {
       startDate: p.startDate,
       endDate: p.endDate
     }));
-
-    // Fallback seeds if empty
-    if (data.length === 0) {
-      data.push(
-        { id: 1, name: 'Tradex platform migration', budget: 50000, status: 'In Progress', startDate: '2026-05-01', endDate: '2026-10-01' },
-        { id: 2, name: 'AI Portfolio Optimization', budget: 85000, status: 'Planning', startDate: '2026-07-01', endDate: '2026-12-31' },
-        { id: 3, name: 'Security Core Audit', budget: 20000, status: 'Completed', startDate: '2026-02-15', endDate: '2026-04-10' }
-      );
-    }
 
     res.json(data);
   } catch (err) {
@@ -117,15 +97,6 @@ exports.getStaffPerformance = async (req, res, next) => {
       };
     }));
 
-    // Fallback seed
-    if (data.length === 0) {
-      data.push(
-        { id: 1, username: 'john_pm', email: 'john@example.com', position: 'Project Manager', departmentId: 1, attendanceRate: 98.2, status: 'Active' },
-        { id: 2, username: 'sarah_fin', email: 'sarah@example.com', position: 'Finance Specialist', departmentId: 2, attendanceRate: 95.8, status: 'Active' },
-        { id: 3, username: 'dave_dev', email: 'dave@example.com', position: 'Lead Software Architect', departmentId: 1, attendanceRate: 97.4, status: 'Active' }
-      );
-    }
-
     res.json(data);
   } catch (err) {
     next(err);
@@ -147,16 +118,6 @@ exports.getClientGrowth = async (req, res, next) => {
       month,
       newClients: count
     }));
-
-    if (data.length === 0) {
-      data.push(
-        { month: '2026-01', newClients: 2 },
-        { month: '2026-02', newClients: 4 },
-        { month: '2026-03', newClients: 3 },
-        { month: '2026-04', newClients: 6 },
-        { month: '2026-05', newClients: 8 }
-      );
-    }
 
     res.json(data);
   } catch (err) {

@@ -27,8 +27,9 @@ exports.register = async (req, res, next) => {
           { email: email.toLowerCase() },
           { username: username }
         ]
-      }
-    }, { transaction: t });
+      },
+      transaction: t
+    });
 
     if (existingUser) {
       await t.rollback();
@@ -39,7 +40,7 @@ exports.register = async (req, res, next) => {
     let referredById = null;
     let referrer = null;
     if (ref) {
-      referrer = await User.findOne({ where: { referralCode: ref } }, { transaction: t });
+      referrer = await User.findOne({ where: { referralCode: ref }, transaction: t });
       if (referrer) {
         referredById = referrer.id;
       }

@@ -1,134 +1,281 @@
-import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import useAuthStore from '../store/authStore';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { mockNotifications, mockTasks, mockUsers } from '../data/mockData';
-import { 
-  Users, LayoutDashboard, CheckSquare, Bell, User, LogOut, 
-  PlusCircle, MessageSquare, Trash2, ShieldAlert, Send, Clock,
-  CheckCircle2, AlertCircle, Calendar, BarChart3, Home, Menu, X,
-  Bold, Italic, Link2, Image, Loader2
+import {
+  LayoutDashboard, Users, Wallet, TrendingUp, DollarSign, CreditCard,
+  Bell, MessageSquare, Zap, LogOut, Home, Menu, X, Search,
+  CheckCircle2, XCircle, ArrowRight, ArrowUpRight, ArrowDownRight,
+  Send, Image, Loader2, Megaphone, ShieldCheck, Ban, Eye,
+  RefreshCw
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 import { io } from 'socket.io-client';
+
+// ---- Fallback mock data (used only if the API call fails or returns nothing) ----
+const mockAdminStats = {
+  totalUsers: 1284,
+  totalDeposits: 182430.55,
+  totalWithdrawals: 96210.10,
+  platformBalance: 412980.75,
+  activeInvestments: 341,
+};
+
+const mockRevenueChart = [
+  { name: 'Mon', deposits: 4200, withdrawals: 2100 },
+  { name: 'Tue', deposits: 5800, withdrawals: 3000 },
+  { name: 'Wed', deposits: 3900, withdrawals: 2600 },
+  { name: 'Thu', deposits: 7200, withdrawals: 4100 },
+  { name: 'Fri', deposits: 6100, withdrawals: 3300 },
+  { name: 'Sat', deposits: 4700, withdrawals: 2000 },
+  { name: 'Sun', deposits: 8300, withdrawals: 5200 },
+];
+
+const mockUsers = [
+  { id: 1, username: 'j.miller', email: 'j.miller@mail.com', balance: 4210.50, status: 'active', joined: '2026-02-14', investments: 3 },
+  { id: 2, username: 'sara_k', email: 'sara.k@mail.com', balance: 980.00, status: 'active', joined: '2026-03-02', investments: 1 },
+  { id: 3, username: 'tundeinvest', email: 'tunde.i@mail.com', balance: 15230.75, status: 'suspended', joined: '2026-01-22', investments: 5 },
+  { id: 4, username: 'amara.b', email: 'amara.b@mail.com', balance: 210.20, status: 'active', joined: '2026-04-18', investments: 0 },
+  { id: 5, username: 'chris_trades', email: 'chris.trades@mail.com', balance: 6789.00, status: 'active', joined: '2026-05-01', investments: 2 },
+];
+
+const mockPendingTransactions = [
+  { id: 101, user: 'j.miller', type: 'deposit', amount: 500.00, method: 'Bank Transfer', date: '2026-07-05T14:20:00Z' },
+  { id: 102, user: 'sara_k', type: 'withdrawal', amount: 200.00, method: 'Crypto (USDT)', date: '2026-07-05T16:05:00Z' },
+  { id: 103, user: 'chris_trades', type: 'withdrawal', amount: 1500.00, method: 'Bank Transfer', date: '2026-07-06T08:40:00Z' },
+  { id: 104, user: 'amara.b', type: 'deposit', amount: 50.00, method: 'Card', date: '2026-07-06T09:15:00Z' },
+];
+
+const mockInvestments = [
+  { id: 201, user: 'j.miller', plan: 'Growth Plan', invested: 1000, dailyProfit: 45, status: 'active' },
+  { id: 202, user: 'tundeinvest', plan: 'Premium Plan', invested: 5000, dailyProfit: 260, status: 'active' },
+  { id: 203, user: 'chris_trades', plan: 'Starter Plan', invested: 300, dailyProfit: 12, status: 'completed' },
+];
+
+const mockBroadcasts = [
+  { id: 1, message: 'System maintenance completed successfully. All trading pairs are now live.', date: '2026-07-04T10:00:00Z' },
+  { id: 2, message: 'New Premium investment plan is now available with higher daily returns.', date: '2026-06-28T09:30:00Z' },
+];
 
 const AdminDashboard = () => {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'dashboard';
+  const initialTab = searchParams.get('tab') || 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    setActiveTab(searchParams.get('tab') || 'dashboard');
-  }, [searchParams]);
-  
-  const [users, setUsers] = useState(mockUsers);
-  const [tasks, setTasks] = useState(mockTasks);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  // Overview state
+  const [stats, setStats] = useState(mockAdminStats);
+  const [revenueChart, setRevenueChart] = useState(mockRevenueChart);
+  const [pieData, setPieData] = useState([
+    { name: 'Clients', value: 55 },
+    { name: 'Staff', value: 30 },
+    { name: 'Partners', value: 15 }
+  ]);
 
-  // Chat states & Socket connection
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [chatMessages, setChatMessages] = useState({});
+  useEffect(() => {
+    axios.get('/api/admin/stats')
+      .then(res => setStats(res.data?.stats || mockAdminStats))
+      .catch(() => setStats(mockAdminStats));
+
+    axios.get('/api/admin/revenue-chart')
+      .then(res => setRevenueChart(res.data?.chart?.length ? res.data.chart : mockRevenueChart))
+      .catch(() => setRevenueChart(mockRevenueChart));
+  }, []);
+
+  useEffect(() => {
+    setActiveTab(searchParams.get('tab') || 'overview');
+  }, [searchParams]);
+
+  // Ensure activeTab is valid - fallback to overview to avoid blank page
+  const knownTabs = ['overview', 'users', 'transactions', 'investments', 'broadcast', 'chat'];
+  useEffect(() => {
+    if (!knownTabs.includes(activeTab)) {
+      setSearchParams({ tab: 'overview' });
+      setActiveTab('overview');
+    }
+  }, [activeTab]);
+
+  // Users state
+  const [users, setUsers] = useState(mockUsers);
+  const [userSearch, setUserSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      axios.get('/api/admin/users')
+        .then(res => setUsers(res.data?.length ? res.data : mockUsers))
+        .catch(() => setUsers(mockUsers));
+    }
+  }, [activeTab]);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const matchesSearch = u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.email.toLowerCase().includes(userSearch.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [users, userSearch, statusFilter]);
+
+  const toggleUserStatus = (id) => {
+    setUsers(prev => prev.map(u => u.id === id
+      ? { ...u, status: u.status === 'active' ? 'suspended' : 'active' }
+      : u));
+    axios.post(`/api/admin/users/${id}/toggle-status`).catch(() => {});
+  };
+
+  // Transactions state
+  const [pendingTx, setPendingTx] = useState(mockPendingTransactions);
+
+  useEffect(() => {
+    if (activeTab === 'transactions') {
+      axios.get('/api/admin/transactions/pending')
+        .then(res => setPendingTx(res.data?.length ? res.data : mockPendingTransactions))
+        .catch(() => setPendingTx(mockPendingTransactions));
+    }
+  }, [activeTab]);
+
+  const handleTxDecision = (id, decision) => {
+    setPendingTx(prev => prev.filter(t => t.id !== id));
+    axios.post(`/api/admin/transactions/${id}/${decision}`).catch(() => {});
+  };
+
+  // Investments state
+  const [investments, setInvestments] = useState(mockInvestments);
+
+  useEffect(() => {
+    if (activeTab === 'investments') {
+      axios.get('/api/admin/investments')
+        .then(res => setInvestments(res.data?.length ? res.data : mockInvestments))
+        .catch(() => setInvestments(mockInvestments));
+    }
+  }, [activeTab]);
+
+  // Broadcast state
+  const [broadcasts, setBroadcasts] = useState(mockBroadcasts);
+  const [broadcastText, setBroadcastText] = useState('');
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'broadcast') {
+      axios.get('/api/admin/broadcasts')
+        .then(res => setBroadcasts(res.data?.length ? res.data : mockBroadcasts))
+        .catch(() => setBroadcasts(mockBroadcasts));
+    }
+  }, [activeTab]);
+
+  const sendBroadcast = async () => {
+    if (!broadcastText.trim()) return;
+    setIsSendingBroadcast(true);
+    const newBroadcast = { id: Date.now(), message: broadcastText, date: new Date().toISOString() };
+    try {
+      await axios.post('/api/admin/broadcasts', { message: broadcastText });
+    } catch (err) {
+      // still reflect locally even if the request fails, admin can retry the network call later
+    } finally {
+      setBroadcasts(prev => [newBroadcast, ...prev]);
+      setBroadcastText('');
+      setIsSendingBroadcast(false);
+    }
+  };
+
+  // Support chat state (multi-conversation)
+  const [conversations, setConversations] = useState([
+    { userId: 1, username: 'j.miller', lastMessage: 'Is my withdrawal processed yet?', unread: 2, time: '10:24 AM' },
+    { userId: 2, username: 'sara_k', lastMessage: 'Thanks for the quick help!', unread: 0, time: 'Yesterday' },
+    { userId: 5, username: 'chris_trades', lastMessage: 'Can I upgrade my plan?', unread: 1, time: 'Yesterday' },
+  ]);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [socket, setSocket] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await axios.get('/api/auth/all-users');
-        const mappedUsers = res.data.map(u => ({ ...u, status: 'active' }));
-        setUsers(mappedUsers);
-        if (mappedUsers.length > 0) {
-          setSelectedUser(mappedUsers[0]);
-        }
-      } catch (error) {
-        setUsers(mockUsers);
-        if (mockUsers.length > 0) {
-          setSelectedUser(mockUsers[0]);
-        }
-      }
-    };
-    fetchUsers();
-  }, []);
-
-  // Load chat messages dynamically from backend database
-  useEffect(() => {
-    if (activeTab === 'chat' && selectedUser) {
-      axios.get(`/api/chat/history/${selectedUser.id}`)
-        .then(res => {
-          setChatMessages((prev) => ({
-            ...prev,
-            [selectedUser.id]: res.data || []
-          }));
-        })
-        .catch(() => {});
+    if (activeTab === 'chat' && activeConversation) {
+      axios.get(`/api/admin/chat/history/${activeConversation.userId}`)
+        .then(res => setChatMessages(res.data?.length ? res.data : []))
+        .catch(() => setChatMessages([]));
     }
-  }, [activeTab, selectedUser]);
+  }, [activeTab, activeConversation]);
 
+  // Load conversations list when opening chat tab
   useEffect(() => {
     if (activeTab === 'chat') {
-      const socketUrl = import.meta.env.DEV
-        ? import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://itt-fov7.onrender.com'
-        : 'https://itt-fov7.onrender.com';
-      
-      const newSocket = io(socketUrl, { withCredentials: true });
-      setSocket(newSocket);
-
-      // Admin joins chat room 1 to receive messages sent to admin
-      newSocket.emit('joinChat', 1);
-
-      newSocket.on('receiveChatMessage', (message) => {
-        const chatPartnerId = message.senderId === 1 ? message.receiverId : message.senderId;
-        setChatMessages((prev) => {
-          const prevMsgs = prev[chatPartnerId] || [];
-          // Prevent duplicates
-          if (prevMsgs.some(m => m.id === message.id)) return prev;
-          return {
-            ...prev,
-            [chatPartnerId]: [...prevMsgs, message]
-          };
-        });
-      });
-
-      return () => {
-        newSocket.disconnect();
-      };
+      axios.get('/api/admin/conversations')
+        .then(res => setConversations(res.data?.length ? res.data : conversations))
+        .catch(() => {});
     }
   }, [activeTab]);
 
-  const sendChatMessage = async (text = '', imageUrl = null) => {
-    if (!selectedUser || (!text.trim() && !imageUrl)) return;
+  useEffect(() => {
+    if (activeTab === 'chat' && user) {
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
 
+      const newSocket = io(socketUrl || undefined, { withCredentials: true });
+      setSocket(newSocket);
+      newSocket.emit('joinChat', user.id);
+
+      newSocket.on('receiveChatMessage', (message) => {
+        setChatMessages((prev) => {
+          if (prev.some(m => m.id === message.id)) return prev;
+          if (activeConversation && message.senderId !== activeConversation.userId) return prev.concat(message);
+          return prev.concat(message);
+        });
+
+        // Update conversations list/unread count
+        setConversations(prev => {
+          const fromUser = message.senderId === user?.id ? message.receiverId : message.senderId;
+          const existing = prev.find(c => c.userId === fromUser);
+          if (existing) {
+            return prev.map(c => c.userId === fromUser ? {
+              ...c,
+              lastMessage: message.text || 'Attachment',
+              unread: activeConversation?.userId === fromUser ? 0 : (c.unread || 0) + 1,
+              time: 'Now'
+            } : c);
+          }
+          const newConv = { userId: fromUser, username: message.senderName || `User ${fromUser}`, lastMessage: message.text || 'Attachment', unread: 1, time: 'Now' };
+          return [newConv, ...prev];
+        });
+      });
+
+      return () => newSocket.disconnect();
+    }
+  }, [activeTab, user, activeConversation]);
+
+  const sendAdminMessage = async (text = '', imageUrl = null) => {
+    if ((!text.trim() && !imageUrl) || !activeConversation) return;
     try {
-      await axios.post('/api/chat/send', {
-        receiverId: selectedUser.id,
+      await axios.post('/api/admin/chat/send', {
+        receiverId: activeConversation.userId,
+        senderId: user?.id,
         text,
         image: imageUrl
       });
+      setChatMessages(prev => [...prev, { senderId: user?.id, senderName: 'Support Agent', text, image: imageUrl, createdAt: new Date().toISOString() }]);
       setChatInput('');
     } catch (err) {
       alert('Failed to send message.');
     }
   };
 
-  const handleFileUpload = async (e) => {
+  const handleAdminFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('category', 'ChatAttachment');
-
     try {
       const res = await axios.post('/api/documents/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      sendChatMessage('', res.data.path);
+      sendAdminMessage('', res.data.path);
     } catch (err) {
       alert('Failed to upload image. Please try again.');
     } finally {
@@ -136,264 +283,386 @@ const AdminDashboard = () => {
     }
   };
 
-  const insertRichText = (tag) => {
-    let tagStart = '';
-    let tagEnd = '';
-    if (tag === 'bold') { tagStart = '**'; tagEnd = '**'; }
-    else if (tag === 'italic') { tagStart = '*'; tagEnd = '*'; }
-    else if (tag === 'link') { tagStart = '['; tagEnd = '](url)'; }
-
-    setChatInput((prev) => prev + tagStart + 'text' + tagEnd);
-  };
-
-  const renderMessageText = (text) => {
-    if (!text) return '';
-    let escaped = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-
-    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    escaped = escaped.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline text-blue-200 hover:text-blue-100">$1</a>');
-
-    return <span dangerouslySetInnerHTML={{ __html: escaped }} />;
-  };
-
-  const stats = [
-    { label: 'Employee', value: users.length, icon: Users, color: 'text-blue-500', bg: 'bg-blue-50' },
-    { label: 'All Tasks', value: tasks.length, icon: CheckSquare, color: 'text-green-500', bg: 'bg-green-50' },
-    { label: 'Overdue', value: 3, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
-    { label: 'No Deadline', value: 0, icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-50' },
-    { label: 'Due Today', value: 0, icon: AlertCircle, color: 'text-orange-500', bg: 'bg-orange-50' },
-    { label: 'Notifications', value: notifications.length, icon: Bell, color: 'text-purple-500', bg: 'bg-purple-50' },
-    { label: 'Pending', value: 1, icon: Clock, color: 'text-slate-500', bg: 'bg-slate-50' },
-    { label: 'In progress', value: 1, icon: Calendar, color: 'text-cyan-500', bg: 'bg-cyan-50' },
-    { label: 'Completed', value: 1, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+  const overviewCards = [
+    { label: 'Total Users', value: stats.totalUsers.toLocaleString(), icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', ring: 'ring-blue-100' },
+    { label: 'Total Deposits', value: `$${stats.totalDeposits.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: ArrowDownRight, color: 'text-emerald-500', bg: 'bg-emerald-50', ring: 'ring-emerald-100' },
+    { label: 'Total Withdrawals', value: `$${stats.totalWithdrawals.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: ArrowUpRight, color: 'text-red-500', bg: 'bg-red-50', ring: 'ring-red-100' },
+    { label: 'Platform Balance', value: `$${stats.platformBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, icon: Wallet, color: 'text-amber-500', bg: 'bg-amber-50', ring: 'ring-amber-100' },
+    { label: 'Active Investments', value: stats.activeInvestments.toLocaleString(), icon: Zap, color: 'text-violet-500', bg: 'bg-violet-50', ring: 'ring-violet-100' },
   ];
 
-  const handleAction = (type) => {
-    alert(`Action ${type} triggered`);
-  };
+  const navItems = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'users', label: 'Manage Users', icon: Users },
+    { id: 'transactions', label: 'Deposits & Withdrawals', icon: CreditCard },
+    { id: 'investments', label: 'All Investments', icon: Zap },
+    { id: 'broadcast', label: 'Broadcast News', icon: Megaphone },
+    { id: 'chat', label: 'Support Chat', icon: MessageSquare },
+  ];
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden font-sans fixed inset-0 z-50">
-      {/* Mobile overlay */}
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/40 overflow-hidden font-sans fixed inset-0 z-50">
       {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm"
+        <div
+          className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transition-transform duration-300 shadow-2xl md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 text-center border-b border-slate-800 relative">
-          <button 
-            className="absolute top-4 right-4 text-slate-400 hover:text-white md:hidden"
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white flex flex-col transition-transform duration-300 shadow-2xl md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 text-center border-b border-white/10 relative">
+          <button
+            className="absolute top-4 right-4 text-slate-400 hover:text-white md:hidden transition-colors"
             onClick={() => setIsSidebarOpen(false)}
           >
             <X className="w-6 h-6" />
           </button>
-          <div className="w-20 h-20 bg-slate-700 rounded-full mx-auto mb-4 flex items-center justify-center border-2 border-brand-primary overflow-hidden shadow-inner">
-             <img src="https://ui-avatars.com/api/?name=ishimwe&background=2563eb&color=fff" className="w-full h-full object-cover" alt="Admin" />
+          <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center bg-gradient-to-tr from-emerald-400 to-blue-500 p-[2px] shadow-lg shadow-emerald-500/30">
+            <div className="w-full h-full rounded-full overflow-hidden bg-slate-800 flex items-center justify-center">
+              <ShieldCheck className="w-9 h-9 text-emerald-400" />
+            </div>
           </div>
-          <h2 className="text-xl font-bold">Admin</h2>
-          <p className="text-slate-400 text-sm">Administrator</p>
+          <h2 className="text-xl font-bold truncate">{user?.username || 'Admin'}</h2>
+          <p className="text-slate-400 text-sm tracking-wide">Administrator</p>
         </div>
-        
-        <nav className="flex-grow py-6 px-4 space-y-2 overflow-y-auto custom-scrollbar">
+
+        <nav className="flex-grow py-6 px-4 space-y-1.5 overflow-y-auto">
           <Link
             to="/"
-            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-all mb-4 border border-slate-800"
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white transition-all mb-4 border border-white/10"
           >
             <Home className="w-5 h-5" />
-            <span className="font-bold">Back to Home</span>
+            <span className="font-bold">Exit to Home</span>
           </Link>
-          
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'users', label: 'Users', icon: Users },
-            { id: 'create-task', label: 'Create Task', icon: PlusCircle },
-            { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-            { id: 'chat', label: 'Chat', icon: MessageSquare },
-            { id: 'notifications', label: 'Notifications', icon: Bell },
-            { id: 'profile', label: 'Profile', icon: User },
-          ].map((item) => (
+
+          {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => { setSearchParams({ tab: item.id }); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
-                activeTab === item.id 
-                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white hover:pl-6'
+              onClick={() => { setSearchParams({ tab: item.id }); setActiveTab(item.id); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                activeTab === item.id
+                ? 'bg-gradient-to-r from-emerald-500 to-blue-500 text-white shadow-lg shadow-emerald-500/25'
+                : 'text-slate-400 hover:bg-white/5 hover:text-white hover:pl-5'
               }`}
             >
               <item.icon className="w-5 h-5" />
               <span className="font-medium">{item.label}</span>
+              {item.id === 'chat' && conversations.some(c => c.unread > 0) && (
+                <span className="ml-auto w-2 h-2 rounded-full bg-red-500"></span>
+              )}
+              {item.id === 'transactions' && pendingTx.length > 0 && (
+                <span className="ml-auto text-[10px] font-black bg-amber-500 text-slate-900 rounded-full px-1.5 py-0.5">{pendingTx.length}</span>
+              )}
             </button>
           ))}
         </nav>
-        
-        <div className="p-4 border-t border-slate-800">
-          <button 
+
+        <div className="p-4 border-t border-white/10">
+          <button
             onClick={async () => {
               await logout();
               navigate('/');
             }}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:bg-red-500/10 hover:text-red-500 rounded-lg transition-all"
+            className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all"
           >
             <LogOut className="w-5 h-5" />
-            <span className="font-medium">Logout</span>
+            <span className="font-medium">Logout Account</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-grow overflow-y-auto bg-slate-50 w-full">
-        {/* Header */}
-        <header className="bg-white shadow-sm px-4 md:px-8 py-4 flex items-center justify-between sticky top-0 z-20 border-b border-slate-100">
+      <main className="flex-grow overflow-y-auto w-full">
+        <header className="bg-white/80 backdrop-blur-md shadow-sm px-4 md:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between sticky top-0 z-20 border-b border-slate-200/60 space-y-4 sm:space-y-0">
           <div className="flex items-center">
-            <button 
-              className="md:hidden mr-3 p-2 text-slate-500 hover:text-brand-primary rounded-lg hover:bg-slate-50"
+            <button
+              className="md:hidden mr-3 p-2 text-slate-500 hover:text-brand-primary rounded-lg hover:bg-slate-100 transition-colors"
               onClick={() => setIsSidebarOpen(true)}
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h1 className="text-xl md:text-2xl font-bold text-slate-800 flex items-center">
-              <span className="text-brand-primary mr-1 md:mr-2">Task</span><span className="hidden sm:inline">Management</span>
+            <h1 className="text-xl md:text-2xl font-bold text-slate-800 truncate max-w-[220px] sm:max-w-none">
+              Admin Control Center
             </h1>
           </div>
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            <div className="relative group">
-              <div className="p-2 hover:bg-slate-100 rounded-full transition cursor-pointer">
-                <Bell className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 group-hover:text-brand-primary transition" />
-              </div>
-              <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">3</span>
-            </div>
-            <div className="flex items-center space-x-3 border-l border-slate-200 pl-2 sm:pl-4 ml-2 sm:ml-4">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-slate-800 leading-none">ishimwe</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Super Admin</p>
-              </div>
-              <img src="https://ui-avatars.com/api/?name=ishimwe&background=2563eb&color=fff" className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-slate-100 shadow-sm" alt="Admin" />
-            </div>
+          <div className="flex items-center self-end sm:self-auto">
+            <span className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl text-sm font-bold border border-emerald-100">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              All systems operational
+            </span>
           </div>
         </header>
 
-        <div className="p-4 md:p-8 max-w-[1600px] mx-auto w-full">
-          {activeTab === 'dashboard' && (
+        <div className="p-3 sm:p-4 md:p-8 max-w-7xl mx-auto w-full">
+
+          {/* OVERVIEW TAB */}
+          {activeTab === 'overview' && (
             <div className="fade-in space-y-8">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between items-start space-y-2 sm:space-y-0">
-                 <h2 className="text-2xl font-bold text-slate-800">Dashboard</h2>
-                 <div className="text-sm text-slate-400 font-medium">Overview & Stats</div>
-              </div>
-              
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
-                {stats.map((s, i) => (
-                  <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center hover:shadow-xl hover:-translate-y-1 transition duration-300 group cursor-default">
-                    <div className={`${s.bg} p-3 sm:p-4 rounded-2xl mb-3 sm:mb-4 group-hover:rotate-12 transition duration-300`}>
-                      <s.icon className={`w-6 h-6 sm:w-8 sm:h-8 ${s.color}`} />
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
+                {overviewCards.map((s, i) => (
+                  <div key={i} className="bg-white p-3 sm:p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 group hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3 md:mb-4">
+                      <div className={`${s.bg} ring-4 ${s.ring} p-2 sm:p-3 rounded-xl group-hover:scale-110 transition flex-shrink-0`}>
+                        <s.icon className={`w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 ${s.color}`} />
+                      </div>
                     </div>
-                    <div className="text-2xl sm:text-3xl font-black text-slate-800 mb-1">{s.value}</div>
-                    <div className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest">{s.label}</div>
+                    <div className="text-base sm:text-lg md:text-2xl font-black text-slate-800 truncate tracking-tight">{s.value}</div>
+                    <div className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1 line-clamp-2">{s.label}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mt-6">
-                <div className="lg:col-span-2 bg-white p-4 sm:p-8 rounded-2xl shadow-sm border border-slate-100">
-                  <div className="flex items-center justify-between mb-6 sm:mb-8">
-                    <h3 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center">
-                      <Send className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3 text-brand-primary" /> Global News Broadcast
-                    </h3>
-                  </div>
-                  <div className="bg-slate-50 rounded-2xl p-4 sm:p-6 border border-slate-100">
-                    <textarea 
-                      className="w-full bg-transparent text-slate-700 placeholder-slate-400 focus:outline-none min-h-[120px] sm:min-h-[180px] text-base sm:text-lg leading-relaxed resize-y"
-                      placeholder="Type a message to all users dashboard..."
-                    ></textarea>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-slate-200">
-                      <p className="text-xs sm:text-sm text-slate-400 flex items-center mb-4 sm:mb-0">
-                        <Users className="w-4 h-4 mr-2" /> Will reach 17 employees
-                      </p>
-                      <button className="w-full sm:w-auto btn-primary px-6 sm:px-8 py-3 flex items-center justify-center font-bold shadow-lg shadow-brand-primary/20">
-                        <Send className="w-4 h-4 mr-2" /> Send Update
-                      </button>
-                    </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                  <h3 className="text-xl font-bold text-slate-800 mb-8 flex items-center">
+                    <span className="p-2 rounded-xl bg-blue-50 mr-3"><TrendingUp className="w-5 h-5 text-brand-primary" /></span>
+                    Deposits vs Withdrawals (7 days)
+                  </h3>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="99%" height="100%">
+                      <BarChart data={revenueChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="name" stroke="#64748b" axisLine={false} tickLine={false} tick={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600 }} />
+                        <YAxis stroke="#64748b" axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} tick={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600 }} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', fontFamily: 'Inter, sans-serif', fontSize: 12 }}
+                        />
+                        <Bar dataKey="deposits" fill="#10b981" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="withdrawals" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
-                
-                <div className="bg-white p-4 sm:p-8 rounded-2xl shadow-sm border border-slate-100">
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-6 sm:mb-8 flex items-center">
-                    <Bell className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3 text-brand-primary" /> Live Activity
-                  </h3>
-                  <div className="space-y-4 sm:space-y-6 relative before:absolute before:left-5 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100">
-                    {notifications.map(n => (
-                      <div key={n.id} className="relative pl-10 group">
-                        <div className="absolute left-3 top-1 w-4 h-4 rounded-full bg-white border-2 border-brand-primary group-hover:scale-150 transition z-10"></div>
-                        <div className="p-3 sm:p-4 bg-slate-50 hover:bg-white hover:shadow-md rounded-xl transition border border-transparent hover:border-slate-100">
-                          <p className="text-slate-800 font-bold text-sm leading-tight">{n.msg}</p>
-                          <p className="text-slate-400 text-xs mt-1 flex items-center uppercase font-bold tracking-tighter">
-                            <Clock className="w-3 h-3 mr-1" /> {n.time}
-                          </p>
+
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">Overview Charts</h3>
+                  <div className="grid grid-cols-1 gap-4 mb-6">
+                    <div className="h-40 bg-slate-50 p-3 rounded-xl">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie dataKey="value" data={pieData} cx="50%" cy="50%" innerRadius={28} outerRadius={56} paddingAngle={4}>
+                            {pieData.map((entry, idx) => (
+                              <Cell key={`cell-${idx}`} fill={['#2563eb', '#10b981', '#f97316'][idx % 3]} />
+                            ))}
+                          </Pie>
+                          <Legend verticalAlign="bottom" height={24} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="h-36 bg-slate-50 p-3 rounded-xl">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={revenueChart}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                          <YAxis axisLine={false} tickLine={false} />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="deposits" stroke="#2563eb" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-slate-800 mb-8">Awaiting Approval</h3>
+                  <div className="space-y-4">
+                    {pendingTx.slice(0, 4).map(t => (
+                      <div key={t.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            t.type === 'deposit' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+                          }`}>{t.type}</span>
+                          <span className="text-[10px] text-slate-400 font-bold">{new Date(t.date).toLocaleDateString()}</span>
                         </div>
+                        <p className="font-bold text-slate-800">{t.user} • ${t.amount.toFixed(2)}</p>
                       </div>
                     ))}
+                    <button
+                      onClick={() => setSearchParams({ tab: 'transactions' })}
+                      className="w-full text-center text-sm font-bold text-brand-primary hover:underline flex items-center justify-center gap-1 pt-2"
+                    >
+                      Review all requests <ArrowRight className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
+          {/* USERS TAB */}
           {activeTab === 'users' && (
-            <div className="fade-in bg-white p-4 sm:p-10 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-10 space-y-4 sm:space-y-0">
-                <div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-800">User Management</h2>
-                  <p className="text-slate-400 text-sm sm:text-base font-medium mt-1">Suspend or delete users and monitor their status.</p>
-                </div>
-                <div className="flex w-full sm:w-auto space-x-3">
-                   <button className="flex-1 sm:flex-none justify-center bg-slate-100 text-slate-700 px-4 sm:px-6 py-2 rounded-xl text-sm sm:text-base font-bold hover:bg-slate-200 transition">Export CSV</button>
-                   <button className="flex-1 sm:flex-none justify-center btn-primary px-4 sm:px-6 py-2 rounded-xl text-sm sm:text-base font-bold shadow-md shadow-brand-primary/20">+ Add User</button>
+            <div className="fade-in bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+                <h2 className="text-2xl md:text-3xl font-black text-slate-800">Manage Users</h2>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Search username or email..."
+                      className="pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/30 w-full sm:w-64"
+                    />
+                  </div>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
                 </div>
               </div>
+
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b-2 border-slate-50">
-                      <th className="pb-6 font-black text-slate-400 uppercase tracking-widest text-xs">Employee</th>
-                      <th className="pb-6 font-black text-slate-400 uppercase tracking-widest text-xs">Contact Information</th>
-                      <th className="pb-6 font-black text-slate-400 uppercase tracking-widest text-xs">Status</th>
-                      <th className="pb-6 font-black text-slate-400 uppercase tracking-widest text-xs text-right">Administrative Actions</th>
+                    <tr className="text-left text-slate-400 text-xs font-black uppercase tracking-widest border-b border-slate-100">
+                      <th className="pb-3 pr-4">User</th>
+                      <th className="pb-3 pr-4">Balance</th>
+                      <th className="pb-3 pr-4">Investments</th>
+                      <th className="pb-3 pr-4">Joined</th>
+                      <th className="pb-3 pr-4">Status</th>
+                      <th className="pb-3">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {users.map(u => (
-                      <tr key={u.id} className="group hover:bg-slate-50/50 transition">
-                        <td className="py-6">
-                           <div className="flex items-center space-x-3">
-                              <img src={`https://ui-avatars.com/api/?name=${u.username}&background=random&color=fff`} className="w-10 h-10 rounded-full shadow-sm" alt={u.username} />
-                              <span className="font-bold text-slate-800 text-lg">{u.username}</span>
-                           </div>
+                  <tbody>
+                    {filteredUsers.map(u => (
+                      <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
+                        <td className="py-4 pr-4">
+                          <div className="flex items-center gap-3">
+                            <img src={`https://ui-avatars.com/api/?name=${u.username}&background=2563eb&color=fff`} className="w-9 h-9 rounded-full" alt={u.username} />
+                            <div>
+                              <p className="font-bold text-slate-800">{u.username}</p>
+                              <p className="text-xs text-slate-400">{u.email}</p>
+                            </div>
+                          </div>
                         </td>
-                        <td className="py-6 text-slate-500 font-medium">{u.email}</td>
-                        <td className="py-6">
-                          <span className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest ${
+                        <td className="py-4 pr-4 font-black text-slate-800">${u.balance.toFixed(2)}</td>
+                        <td className="py-4 pr-4 font-bold text-slate-600">{u.investments}</td>
+                        <td className="py-4 pr-4 text-slate-500">{u.joined}</td>
+                        <td className="py-4 pr-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
                             u.status === 'active' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
-                          }`}>
-                            {u.status}
-                          </span>
+                          }`}>{u.status}</span>
                         </td>
-                        <td className="py-4 sm:py-6 text-right space-x-2 sm:space-x-3 whitespace-nowrap">
-                          <button className="px-3 sm:px-4 py-2 text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-xl transition font-bold text-[10px] sm:text-sm inline-flex items-center">
-                            <ShieldAlert className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Suspend</span>
+                        <td className="py-4">
+                          <div className="flex items-center gap-2">
+                            <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors" title="View details">
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => toggleUserStatus(u.id)}
+                              className={`p-2 rounded-lg transition-colors ${
+                                u.status === 'active' ? 'hover:bg-red-50 text-red-500' : 'hover:bg-emerald-50 text-emerald-600'
+                              }`}
+                              title={u.status === 'active' ? 'Suspend user' : 'Reactivate user'}
+                            >
+                              <Ban className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 text-slate-400 font-medium">No users match your search.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TRANSACTIONS TAB */}
+          {activeTab === 'transactions' && (
+            <div className="fade-in bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl md:text-3xl font-black text-slate-800">Deposits & Withdrawals</h2>
+                <button
+                  onClick={() => axios.get('/api/admin/transactions/pending').then(res => setPendingTx(res.data?.length ? res.data : mockPendingTransactions)).catch(() => {})}
+                  className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+
+              {pendingTx.length === 0 ? (
+                <div className="text-center py-16">
+                  <CheckCircle2 className="w-16 h-16 text-emerald-300 mx-auto mb-4" />
+                  <p className="text-slate-600 font-bold">All caught up — no pending requests.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingTx.map(t => (
+                    <div key={t.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-xl ${t.type === 'deposit' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                          {t.type === 'deposit' ? <ArrowDownRight className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800">{t.user} <span className="text-slate-400 font-medium">• {t.method}</span></p>
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">{new Date(t.date).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 justify-between sm:justify-end">
+                        <span className={`font-black text-lg ${t.type === 'deposit' ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {t.type === 'deposit' ? '+' : '-'}${t.amount.toFixed(2)}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleTxDecision(t.id, 'approve')}
+                            className="flex items-center gap-1.5 bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-emerald-600 hover:-translate-y-0.5 transition-all"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Approve
                           </button>
-                          <button className="px-3 sm:px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition font-bold text-[10px] sm:text-sm inline-flex items-center">
-                            <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Delete</span>
+                          <button
+                            onClick={() => handleTxDecision(t.id, 'reject')}
+                            className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all"
+                          >
+                            <XCircle className="w-4 h-4" /> Reject
                           </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* INVESTMENTS TAB */}
+          {activeTab === 'investments' && (
+            <div className="fade-in bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8">
+              <h2 className="text-2xl md:text-3xl font-black text-slate-800 mb-8 flex items-center">
+                <span className="p-2.5 rounded-xl bg-violet-50 mr-3"><Zap className="w-7 h-7 text-violet-500" /></span>
+                All Active Investments
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-400 text-xs font-black uppercase tracking-widest border-b border-slate-100">
+                      <th className="pb-3 pr-4">User</th>
+                      <th className="pb-3 pr-4">Plan</th>
+                      <th className="pb-3 pr-4">Invested</th>
+                      <th className="pb-3 pr-4">Daily Profit</th>
+                      <th className="pb-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {investments.map(inv => (
+                      <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
+                        <td className="py-4 pr-4 font-bold text-slate-800">{inv.user}</td>
+                        <td className="py-4 pr-4 text-slate-600 font-medium">{inv.plan}</td>
+                        <td className="py-4 pr-4 font-black text-slate-800">${inv.invested.toFixed(2)}</td>
+                        <td className="py-4 pr-4 font-black text-emerald-600">${inv.dailyProfit.toFixed(2)}</td>
+                        <td className="py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                            inv.status === 'active' ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-600'
+                          }`}>{inv.status}</span>
                         </td>
                       </tr>
                     ))}
@@ -403,173 +672,148 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {activeTab === 'create-task' && (
-            <div className="fade-in max-w-3xl mx-auto">
-               <div className="bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-slate-100">
-                  <h2 className="text-2xl sm:text-3xl font-black text-slate-800 mb-2">Create New Task</h2>
-                  <p className="text-slate-400 mb-6 sm:mb-10 text-sm sm:text-base font-medium">Assign specific goals and deadlines to your team members.</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
-                    <div className="space-y-2">
-                      <label className="text-sm font-black text-slate-700 uppercase tracking-widest pl-1">Task Title</label>
-                      <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-brand-primary/20 outline-none transition" placeholder="e.g. System Audit" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-black text-slate-700 uppercase tracking-widest pl-1">Assign To</label>
-                      <select className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-brand-primary/20 outline-none transition appearance-none">
-                        {users.map(u => <option key={u.id}>{u.username}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-black text-slate-700 uppercase tracking-widest pl-1">Priority Level</label>
-                      <div className="flex space-x-3">
-                         {['Low', 'Medium', 'High'].map(p => (
-                            <button key={p} className={`flex-grow py-3 rounded-xl border-2 font-bold transition ${p === 'High' ? 'border-brand-primary text-brand-primary bg-blue-50' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}>{p}</button>
-                         ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-black text-slate-700 uppercase tracking-widest pl-1">Deadline Date</label>
-                      <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-brand-primary/20 outline-none transition" />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 mb-10">
-                    <label className="text-sm font-black text-slate-700 uppercase tracking-widest pl-1">Task Details</label>
-                    <textarea className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 focus:ring-2 focus:ring-brand-primary/20 outline-none transition min-h-[150px]" placeholder="Explain the task requirements..."></textarea>
-                  </div>
-                  
-                  <button className="w-full btn-primary py-4 sm:py-5 rounded-2xl text-lg sm:text-xl font-black shadow-2xl shadow-brand-primary/30 flex items-center justify-center hover:scale-[1.02] active:scale-100 transition">
-                    <PlusCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-3" /> Assign Task
+          {/* BROADCAST TAB */}
+          {activeTab === 'broadcast' && (
+            <div className="fade-in max-w-3xl mx-auto space-y-6">
+              <h2 className="text-2xl md:text-3xl font-black text-slate-800 mb-2">Broadcast News</h2>
+              <p className="text-slate-500 font-medium mb-6">Send an announcement that every user will see on their dashboard.</p>
+
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <textarea
+                  value={broadcastText}
+                  onChange={(e) => setBroadcastText(e.target.value)}
+                  placeholder="Write your announcement..."
+                  rows={4}
+                  className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 font-medium text-slate-700 resize-none"
+                />
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={sendBroadcast}
+                    disabled={isSendingBroadcast || !broadcastText.trim()}
+                    className="flex items-center gap-2 bg-gradient-to-r from-brand-primary to-blue-500 text-white px-6 py-3 rounded-xl font-bold shadow-md shadow-brand-primary/25 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
+                  >
+                    {isSendingBroadcast ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-4 h-4" />}
+                    Publish Broadcast
                   </button>
-               </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-slate-800">Past Broadcasts</h3>
+                {broadcasts.map(b => (
+                  <div key={b.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
+                    <div className="p-3 rounded-xl bg-blue-50 text-blue-600 flex-shrink-0">
+                      <Megaphone className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-slate-800 font-bold leading-snug">{b.message}</p>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">{new Date(b.date).toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
+          {/* SUPPORT CHAT TAB */}
           {activeTab === 'chat' && (
-            <div className="fade-in h-[calc(100vh-140px)] md:h-[750px] flex flex-col md:flex-row bg-brand-secondary/40 border border-brand-border/30 rounded-3xl shadow-2xl backdrop-blur-md overflow-hidden">
-              <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-brand-border/20 flex flex-col bg-brand-secondary/20 h-[35%] md:h-full">
-                <div className="p-4 md:p-6 border-b border-brand-border/20 z-10 hidden sm:block">
-                   <h3 className="text-lg sm:text-xl font-black text-brand-text">Messages</h3>
-                   <p className="text-brand-text/50 text-xs sm:text-sm mt-1">{users.length} Users Listed</p>
+            <div className="fade-in h-[calc(100vh-140px)] md:h-[650px] bg-white border border-slate-200 rounded-3xl shadow-lg overflow-hidden flex font-sans">
+              {/* Conversation list */}
+              <div className={`w-full sm:w-72 border-r border-slate-100 flex-col ${activeConversation ? 'hidden sm:flex' : 'flex'}`}>
+                <div className="p-4 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-800">Conversations</h3>
                 </div>
-                <div className="flex-grow overflow-y-auto flex md:flex-col">
-                  {users.map(u => {
-                    const isSelected = selectedUser && selectedUser.id === u.id;
-                    const hasMsgs = chatMessages[u.id] && chatMessages[u.id].length > 0;
-                    return (
-                      <div 
-                        key={u.id} 
-                        onClick={() => setSelectedUser(u)}
-                        className={`p-4 sm:p-6 hover:bg-brand-secondary/50 cursor-pointer transition md:border-l-4 md:border-b-0 border-b-4 ${isSelected ? 'md:border-brand-primary border-brand-primary bg-brand-secondary/40 min-w-[150px] md:min-w-0 font-bold' : 'border-transparent opacity-60 min-w-[150px] md:min-w-0'}`}
-                      >
-                        <div className="flex items-center space-x-3">
-                           <div className="relative">
-                              <img src={`https://ui-avatars.com/api/?name=${u.username}&background=random&color=fff`} className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl shadow-md border border-brand-border/30" alt={u.username} />
-                              <div className="absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full border-2 sm:border-4 border-brand-secondary"></div>
-                           </div>
-                           <div className="min-w-0 flex-grow">
-                              <div className="font-bold text-brand-text text-sm sm:text-base truncate max-w-[80px] sm:max-w-none">{u.username}</div>
-                              <div className="text-[10px] text-brand-text/50 font-bold uppercase truncate max-w-[80px] sm:max-w-[120px]">
-                                 {hasMsgs ? `${chatMessages[u.id].length} messages` : u.role}
-                              </div>
-                           </div>
+                <div className="flex-grow overflow-y-auto">
+                  {conversations.map(c => (
+                    <button
+                      key={c.userId}
+                      onClick={() => {
+                        setActiveConversation(c);
+                        setConversations(prev => prev.map(x => x.userId === c.userId ? { ...x, unread: 0 } : x));
+                      }}
+                      className={`w-full flex items-center gap-3 p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left ${
+                        activeConversation?.userId === c.userId ? 'bg-blue-50/60' : ''
+                      }`}
+                    >
+                      <img src={`https://ui-avatars.com/api/?name=${c.username}&background=2563eb&color=fff`} className="w-10 h-10 rounded-full flex-shrink-0" alt={c.username} />
+                      <div className="min-w-0 flex-grow">
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-slate-800 text-sm truncate">{c.username}</p>
+                          <span className="text-[10px] text-slate-400 font-bold flex-shrink-0">{c.time}</span>
                         </div>
+                        <p className="text-xs text-slate-500 truncate">{c.lastMessage}</p>
                       </div>
-                    );
-                  })}
+                      {c.unread > 0 && (
+                        <span className="w-5 h-5 flex items-center justify-center bg-brand-primary text-white text-[10px] font-black rounded-full flex-shrink-0">{c.unread}</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="flex-grow flex flex-col h-[65%] md:h-full">
-                {selectedUser ? (
-                  <>
-                    <div className="px-4 sm:px-8 py-4 sm:py-6 bg-brand-secondary/60 border-b border-brand-border/20 flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                         <div className="relative">
-                            <img src={`https://ui-avatars.com/api/?name=${selectedUser.username}&background=2563eb&color=fff`} className="w-10 h-10 rounded-full border border-brand-border/30 shadow-md" alt={selectedUser.username} />
-                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-brand-secondary"></div>
-                         </div>
-                         <div>
-                            <span className="font-bold text-brand-text block text-base sm:text-lg leading-tight">{selectedUser.username}</span>
-                            <span className="text-emerald-400 text-[10px] font-bold uppercase tracking-widest mt-0.5 block">{selectedUser.role} • Active Now</span>
-                         </div>
-                      </div>
-                      {/* Rich Text Controls */}
-                      <div className="flex space-x-1 bg-brand-dark/40 border border-brand-border/30 p-1 rounded-xl">
-                         <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Bold className="w-4 h-4" /></button>
-                         <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Italic className="w-4 h-4" /></button>
-                         <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Link2 className="w-4 h-4" /></button>
-                      </div>
-                    </div>
-                    <div className="flex-grow p-4 sm:p-6 space-y-3 bg-brand-dark/10 overflow-y-auto flex flex-col font-sans">
-                      {chatMessages[selectedUser.id] && chatMessages[selectedUser.id].length > 0 ? (
-                        chatMessages[selectedUser.id].map((msg, index) => {
-                          const isSelf = msg.senderId === 1;
-                          return (
-                            <div key={index} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
-                              {!isSelf && (
-                                 <img src={`https://ui-avatars.com/api/?name=${msg.senderName}&background=random&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-md border border-brand-border/30" alt="avatar" />
-                              )}
-                              <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-md border ${
-                                 isSelf 
-                                 ? 'bg-gradient-to-r from-brand-primary to-brand-accent text-white rounded-br-[4px] border-brand-primary/20' 
-                                 : 'bg-brand-secondary text-brand-text border-brand-border/40 rounded-bl-[4px]'
-                              } max-w-[70%]`}>
-                                 {msg.text && <p className="font-normal">{renderMessageText(msg.text)}</p>}
-                                 {msg.image && (
-                                    <div className="mt-2 group relative overflow-hidden rounded-2xl border border-brand-border/30 bg-brand-dark/30 p-1.5 transition-all duration-300 hover:border-brand-primary/50">
-                                       <div className="absolute top-2 left-2 z-10 bg-brand-primary/95 text-white text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shadow-md">
-                                          <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                                          Market Analysis Chart
-                                       </div>
-                                       <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl">
-                                          <img 
-                                             src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} 
-                                             alt="Uploaded chart analysis" 
-                                             className="w-full max-w-[280px] sm:max-w-md object-cover transition-transform duration-500 group-hover:scale-105" 
-                                          />
-                                       </a>
-                                    </div>
-                                 )}
-                                 <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-brand-text/50'}`}>
-                                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                 </span>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="flex justify-center items-center h-full text-brand-text/40 font-medium">
-                           No messages exchanged yet. Send a greeting to start.
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4 bg-brand-secondary/60 border-t border-brand-border/20">
-                      <div className="flex items-center space-x-2 bg-brand-dark/60 border border-brand-border/30 p-1.5 rounded-full shadow-inner">
-                         <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                         <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-brand-secondary/50 rounded-full transition text-brand-accent relative shrink-0">
-                            {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-brand-accent" /> : <Image className="w-5 h-5" />}
-                         </button>
 
-                         <input 
-                            type="text" 
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(chatInput); }}
-                            className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-brand-text placeholder-brand-text/40 font-medium w-0 min-w-0" 
-                            placeholder="Type a message..." 
-                         />
-                         <button onClick={() => sendChatMessage(chatInput)} className="text-brand-accent hover:text-brand-primary p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
-                            <Send className="w-5 h-5 fill-current" />
-                         </button>
+              {/* Chat panel */}
+              <div className={`flex-grow flex-col ${activeConversation ? 'flex' : 'hidden sm:flex'}`}>
+                {!activeConversation ? (
+                  <div className="flex-grow flex items-center justify-center text-slate-400 font-bold">
+                    Select a conversation to start chatting
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50">
+                      <button className="sm:hidden text-slate-500" onClick={() => setActiveConversation(null)}>
+                        <X className="w-5 h-5" />
+                      </button>
+                      <img src={`https://ui-avatars.com/api/?name=${activeConversation.username}&background=2563eb&color=fff`} className="w-9 h-9 rounded-full" alt={activeConversation.username} />
+                      <span className="font-bold text-slate-800">{activeConversation.username}</span>
+                    </div>
+
+                    <div className="flex-grow p-4 sm:p-6 space-y-4 overflow-y-auto bg-slate-50/50">
+                      {chatMessages.length === 0 ? (
+                        <p className="text-center text-slate-400 text-sm font-medium">No messages yet in this conversation.</p>
+                      ) : chatMessages.map((msg) => {
+                        const isSelf = msg.senderId === user?.id;
+                        return (
+                          <div key={msg.id || msg._id || Math.random()} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
+                            <div className={`relative px-4 py-2.5 rounded-[18px] text-[15px] leading-tight shadow-sm border max-w-[75%] ${
+                              isSelf
+                                ? 'bg-gradient-to-r from-brand-primary to-blue-500 text-white rounded-br-[4px] border-brand-primary/20'
+                                : 'bg-white text-slate-700 border-slate-200 rounded-bl-[4px]'
+                            }`}>
+                              {msg.text && <p className="font-normal">{msg.text}</p>}
+                              {msg.image && (
+                                <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block mt-2 overflow-hidden rounded-xl">
+                                  <img src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} alt="attachment" className="w-full max-w-[260px] object-cover" />
+                                </a>
+                              )}
+                              <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-slate-400'}`}>
+                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="p-4 border-t border-slate-100 bg-white">
+                      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-full">
+                        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleAdminFileUpload} className="hidden" />
+                        <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-slate-200 rounded-full transition text-brand-primary shrink-0">
+                          {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Image className="w-5 h-5" />}
+                        </button>
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') sendAdminMessage(chatInput); }}
+                          className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-slate-700 placeholder-slate-400 font-medium"
+                          placeholder="Reply to user..."
+                        />
+                        <button onClick={() => sendAdminMessage(chatInput)} className="text-brand-primary hover:text-blue-600 p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
+                          <Send className="w-5 h-5 fill-current" />
+                        </button>
                       </div>
                     </div>
                   </>
-                ) : (
-                  <div className="flex flex-col justify-center items-center h-full text-brand-text/40 font-medium p-6 text-center">
-                     <MessageSquare className="w-16 h-16 mb-4 text-brand-text/20 animate-pulse" />
-                     Select a user from the messages list to view conversation history and send trading charts.
-                  </div>
                 )}
               </div>
             </div>

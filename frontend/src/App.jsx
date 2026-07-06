@@ -11,6 +11,8 @@ import Dashboard from './pages/Dashboard';
 import About from './pages/About';
 import Invest from './pages/Invest';
 import AdminDashboard from './pages/AdminDashboard';
+import ManagerDashboard from './pages/ManagerDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -22,14 +24,17 @@ const ScrollToTop = () => {
   return null;
 };
 
+const isAdminUser = (user) => {
+  return user.role === 'CEO' || user.role === 'Chairman' || user.role === 'Admin';
+};
+
 const ProtectedRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
   
-  const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
-  if (isAdmin) {
+  if (isAdminUser(user)) {
     return <Navigate to="/admin-dashboard" />;
   }
   return children;
@@ -41,10 +46,19 @@ const AdminProtectedRoute = ({ children }) => {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
   
-  const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
-  if (!isAdmin) {
+  if (!isAdminUser(user)) {
     return <Navigate to="/dashboard" />;
   }
+  return children;
+};
+
+const ManagerProtectedRoute = ({ children }) => {
+  const user = useAuthStore((state) => state.user);
+  const loading = useAuthStore((state) => state.loading);
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
+  if (!user) return <Navigate to="/login" />;
+  const allowed = ['Manager', 'CEO', 'Chairman', 'HR Manager', 'Operations Manager'];
+  if (!allowed.includes(user.role)) return <Navigate to="/dashboard" />;
   return children;
 };
 
@@ -54,8 +68,7 @@ const RegisterProtectedRoute = ({ children }) => {
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (!user) return <Navigate to="/register" />;
   
-  const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
-  if (isAdmin) {
+  if (isAdminUser(user)) {
     return <Navigate to="/admin-dashboard" />;
   }
   return children;
@@ -66,8 +79,7 @@ const AuthRoute = ({ children }) => {
   const loading = useAuthStore((state) => state.loading);
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (user) {
-    const isAdmin = user.username === 'ishimwe' || user.email.includes('ishimwe') || user.email.includes('admin');
-    if (isAdmin) {
+    if (isAdminUser(user)) {
       return <Navigate to="/admin-dashboard" replace />;
     }
     return <Navigate to="/dashboard" replace />;
@@ -110,9 +122,21 @@ const AppContent = () => {
             path="/admin-dashboard" 
             element={
               <AdminProtectedRoute>
-                <AdminDashboard />
+                <ErrorBoundary>
+                  <AdminDashboard />
+                </ErrorBoundary>
               </AdminProtectedRoute>
             } 
+          />
+          <Route 
+            path="/manager-dashboard" 
+            element={
+              <ManagerProtectedRoute>
+                <ErrorBoundary>
+                  <ManagerDashboard />
+                </ErrorBoundary>
+              </ManagerProtectedRoute>
+            }
           />
           {/* Catch-all route mapping for any undefined pages */}
           <Route path="*" element={<Navigate to="/" replace />} />

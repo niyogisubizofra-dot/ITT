@@ -105,9 +105,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (activeTab === 'chat' && user) {
-      const socketUrl = import.meta.env.DEV
-        ? import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://itt-fov7.onrender.com'
-        : 'https://itt-fov7.onrender.com';
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
       
       const newSocket = io(socketUrl, { withCredentials: true });
       setSocket(newSocket);
@@ -177,18 +175,32 @@ const Dashboard = () => {
 
   const renderMessageText = (text) => {
     if (!text) return '';
-    let escaped = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+    const parts = [];
+    let remaining = text;
+    let key = 0;
 
-    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    escaped = escaped.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="underline text-blue-200 hover:text-blue-100">$1</a>');
+    const regex = /(\*\*(.*?)\*\*|\*(.*?)\*|\[(.*?)\]\((.*?)\))/g;
+    let lastIndex = 0;
+    let match;
 
-    return <span dangerouslySetInnerHTML={{ __html: escaped }} />;
+    while ((match = regex.exec(remaining)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(remaining.slice(lastIndex, match.index));
+      }
+      if (match[2]) {
+        parts.push(<strong key={key++}>{match[2]}</strong>);
+      } else if (match[3]) {
+        parts.push(<em key={key++}>{match[3]}</em>);
+      } else if (match[4] && match[5]) {
+        parts.push(<a key={key++} href={match[5]} target="_blank" rel="noopener noreferrer" className="underline text-blue-200 hover:text-blue-100">{match[4]}</a>);
+      }
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < remaining.length) {
+      parts.push(remaining.slice(lastIndex));
+    }
+
+    return <span>{parts}</span>;
   };
 
   useEffect(() => {
@@ -220,7 +232,7 @@ const Dashboard = () => {
         }
       });
 
-      setCountdowns({...countdowns}); // Trigger re-render for countdown
+      setCountdowns(prev => ({...prev})); // Trigger re-render for countdown
     }, 1000);
 
     return () => clearInterval(interval);
@@ -825,7 +837,6 @@ const Dashboard = () => {
             </div>
           )}
         </div>
-        <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} onDeposit={handleDeposit} />
         <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} onDeposit={handleDeposit} />
         <WithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} balance={parseFloat(user?.balance || 0)} />
       </main>

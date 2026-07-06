@@ -21,6 +21,8 @@ const eventRoutes = require('./routes/event');
 const investRoutes = require('./routes/invest');
 const referralsRoutes = require('./routes/referrals');
 const chatRoutes = require('./routes/chat');
+const managerRoutes = require('./routes/manager');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
@@ -51,6 +53,8 @@ app.use('/api/events', eventRoutes);
 app.use('/api/invest', investRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/manager', managerRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health and status endpoints for deployment checks
 app.get('/', (req, res) => {

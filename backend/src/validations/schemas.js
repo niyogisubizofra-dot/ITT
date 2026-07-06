@@ -31,7 +31,7 @@ const schemas = {
   userUpdate: Joi.object({
     username: Joi.string().min(3).max(30),
     email: Joi.string().email(),
-    role: Joi.string().valid('CEO', 'Chairman', 'Project Manager', 'Finance Manager', 'Operations Manager', 'HR Manager', 'Staff', 'Client'),
+    role: Joi.string().valid('CEO', 'Chairman', 'Manager', 'Project Manager', 'Finance Manager', 'Operations Manager', 'HR Manager', 'Staff', 'Client'),
     balance: Joi.number().precision(2)
   }),
 

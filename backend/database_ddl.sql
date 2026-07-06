@@ -310,22 +310,19 @@ CREATE TABLE "Messages" (
 
 -- Users Seed (Pre-hashed bcrypt passwords for default accounts)
 INSERT INTO "Users" ("id", "username", "email", "password", "role", "referralCode", "balance", "referralEarnings", "createdAt", "updatedAt") VALUES
-(1, 'ceo', 'ceo@example.com', '$2a$10$WpPzL7x8x5f0tC/eG9VzU.65u4C74hD3Y3p/1N2XbZ1.lq2x5sC9a', 'CEO', 'CEOBONUS', 1000.00, 0.00, NOW(), NOW()),
-(2, 'staff_user', 'staff@example.com', '$2a$10$WpPzL7x8x5f0tC/eG9VzU.65u4C74hD3Y3p/1N2XbZ1.lq2x5sC9a', 'Staff', 'STAFFBONUS', 0.00, 0.00, NOW(), NOW()),
-(3, 'client_user', 'client@example.com', '$2a$10$WpPzL7x8x5f0tC/eG9VzU.65u4C74hD3Y3p/1N2XbZ1.lq2x5sC9a', 'Client', 'CLIENTBONUS', 50.00, 0.00, NOW(), NOW()),
-(4, 'ishimwe', 'ishimwe@example.com', '$2b$10$y2WkeC3HIrEXKfF4oSGUS.Xm3XrHZs4NK/Br9pP4r7tPC.T5qQ9ai', 'CEO', 'ISHIMWE_ADMIN', 5000.00, 0.00, NOW(), NOW())
+(1, 'ishimwe', 'ishimwe@example.com', '$2b$10$rhjH2RjoiDvP35ONaRJyy.C/OKZtWZX0QAxPn6Q96sfLJPtxOZCGW', 'CEO', 'ISHIMWE_ADMIN', 0.00, 0.00, NOW(), NOW()),
+(2, 'jeremie', 'jeremie@example.com', '$2b$10$4azzjBBGnqBhnDiy6gLroOvdDHwcEoZiEXIoRuI0EY8BwSqREcVXm', 'Client', 'JEREMIE_CLIENT', 0.00, 0.00, NOW(), NOW())
 ON CONFLICT DO NOTHING;
 
--- Finance Metrics Seed
-INSERT INTO "Revenues" ("amount", "category", "date", "description", "createdAt", "updatedAt") VALUES
-(15000.00, 'Consulting', '2026-05-10', 'Initial project revenue', NOW(), NOW()),
-(20000.00, 'Software Licensing', '2026-06-15', 'Product sales', NOW(), NOW())
-ON CONFLICT DO NOTHING;
+-- Employees Seed
+INSERT INTO "Employees" ("userId", "position", "salary", "hireDate", "status", "createdAt", "updatedAt") VALUES
+(1, 'CEO', 0.00, CURRENT_DATE, 'Active', NOW(), NOW())
+ON CONFLICT ("userId") DO UPDATE SET "status" = 'Active', "position" = 'CEO', "updatedAt" = NOW();
 
-INSERT INTO "Expenses" ("amount", "category", "date", "description", "approvedById", "createdAt", "updatedAt") VALUES
-(4500.00, 'Cloud Infrastructure', '2026-05-12', 'AWS Hosting fees', 1, NOW(), NOW()),
-(12000.00, 'Payroll', '2026-06-28', 'Monthly payroll', 1, NOW(), NOW())
-ON CONFLICT DO NOTHING;
+-- Clients Seed
+INSERT INTO "Clients" ("name", "email", "status", "createdAt", "updatedAt") VALUES
+('jeremie', 'jeremie@example.com', 'Active', NOW(), NOW())
+ON CONFLICT ("email") DO UPDATE SET "status" = 'Active', "updatedAt" = NOW();
 
 -- Reset SERIAL sequences (important for subsequent auto-increments to work properly)
 SELECT setval(pg_get_serial_sequence('"Users"', 'id'), coalesce(max(id), 1), max(id) IS NOT null) FROM "Users";

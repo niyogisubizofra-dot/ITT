@@ -25,7 +25,8 @@ const Login = () => {
     setLoading(true);
     try {
       const res = await login(formData.email, formData.password);
-      if (res.data.user.username === 'ishimwe' || formData.email.includes('ishimwe') || formData.email.includes('admin')) {
+      const role = res.data.user.role;
+      if (role === 'CEO' || role === 'Chairman' || role === 'Admin') {
         navigate('/admin-dashboard');
       } else {
         navigate('/dashboard');
