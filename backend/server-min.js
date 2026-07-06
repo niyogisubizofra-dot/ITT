@@ -4,49 +4,54 @@ const http = require('http');
 const express = require('express');
 
 const PORT = process.env.PORT || 5000;
+let fullApp = null;
+let isReady = false;
 
 // Create minimal app first
 const app = express();
 
-// Immediate health checks
+// JSON parser
+app.use(express.json());
+
+// Health check - always available
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', ready: isReady, timestamp: new Date().toISOString() });
 });
 
+// Status endpoint
 app.get('/', (req, res) => {
-  res.json({ message: 'API is running', version: '1.0.0' });
+  if (isReady) {
+    res.json({ message: 'API is running', version: '1.0.0' });
+  } else {
+    res.status(503).json({ message: 'API is starting up', version: '1.0.0' });
+  }
 });
 
 // Create server and listen immediately
 const server = http.createServer(app);
 
-const listener = server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`✓ Server listening on port ${PORT}`);
 });
 
-// Timeout after 30 seconds if not connected
-listener.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use`);
-    process.exit(1);
-  }
+// Error handling
+server.on('error', (err) => {
   console.error('Server error:', err);
+  process.exit(1);
 });
 
-// Load full app in background
-(async () => {
+// Load full app asynchronously
+setTimeout(async () => {
   try {
     console.log('Loading full application...');
-    await new Promise(resolve => setTimeout(resolve, 100));
     
-    const { Server } = require('socket.io');
-    const fullApp = require('./src/app');
+    // Load the full app
+    fullApp = require('./src/app');
+    console.log('✓ Full app loaded');
     
-    console.log('✓ Full app module loaded');
-    
-    // Attach Socket.io
+    // Try to attach Socket.io
     try {
-      const { sequelize } = require('./src/models');
+      const { Server } = require('socket.io');
       const { initDashboardSocket } = require('./src/sockets/dashboardSocket');
       
       const io = new Server(server, {
@@ -60,69 +65,53 @@ listener.on('error', (err) => {
       fullApp.set('io', io);
       console.log('✓ Socket.io configured');
     } catch (err) {
-      console.warn('⚠ Socket.io warning:', err.message);
+      console.warn('⚠ Socket.io load warning:', err.message);
     }
     
-    // Use the full app for all other routes
-    app.use((req, res, next) => {
-      fullApp(req, res, next);
+    // Now route requests to the full app
+    app.use((req, res) => {
+      fullApp(req, res);
     });
     
-    // Initialize database separately
-    initializeDatabase();
+    console.log('✓ Routing configured');
+    isReady = true;
+    
+    // Initialize database
+    initDatabase();
     
   } catch (err) {
-    console.warn('⚠ Application loading warning:', err.message);
+    console.error('Error loading full app:', err.message);
+    console.error(err.stack);
   }
-})();
+}, 50);
 
-async function initializeDatabase() {
+async function initDatabase() {
   try {
-    const { sequelize, User, Employee, Client } = require('./src/models');
-    const bcrypt = require('bcryptjs');
-    const { startBackupJob } = require('./src/jobs/backupJob');
+    const { sequelize } = require('./src/models');
     
-    console.log('Authenticating database...');
+    console.log('Connecting to database...');
     await sequelize.authenticate();
     console.log('✓ Database connected');
     
-    console.log('Synchronizing models...');
+    console.log('Syncing models...');
     await sequelize.sync();
-    console.log('✓ Database models synchronized');
+    console.log('✓ Models synced');
     
-    // Run seeders
-    try {
-      let user = await User.findOne({ where: { username: 'ishimwe' } });
-      if (!user) {
-        user = await User.create({
-          username: 'ishimwe',
-          email: 'ishimwe@example.com',
-          password: '123',
-          role: 'CEO',
-          referralCode: 'ISHIMWE_ADMIN',
-          balance: 0.00
-        });
-        console.log('✓ Admin user seeded');
-      }
-    } catch (err) {
-      console.warn('⚠ Seeding warning:', err.message);
-    }
-    
-    // Start backup job
+    const { startBackupJob } = require('./src/jobs/backupJob');
     startBackupJob();
     console.log('✓ Backup job started');
     
   } catch (err) {
-    console.warn('⚠ Database initialization warning:', err.message);
-    console.warn('Application will continue running with limited functionality');
+    console.warn('⚠ Database warning:', err.message);
   }
 }
 
-// Global error handlers
+// Global handlers
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  console.error('Uncaught exception:', err.message);
+  console.error(err.stack);
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
+  console.error('Unhandled rejection:', reason);
 });
