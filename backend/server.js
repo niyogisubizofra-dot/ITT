@@ -1,25 +1,28 @@
 const http = require('http');
 const { Server } = require('socket.io');
-const app = require('./src/app');
-const { sequelize, User, Department, Employee, Client, Revenue, Expense, Budget } = require('./src/models');
-const { initDashboardSocket } = require('./src/sockets/dashboardSocket');
-const bcrypt = require('bcryptjs');
-const { startBackupJob } = require('./src/jobs/backupJob');
 require('dotenv').config();
 
-const PORT = process.env.PORT || 5000;
-const server = http.createServer(app);
+// Wrap everything in try-catch to catch initialization errors
+try {
+  const app = require('./src/app');
+  const { sequelize, User, Department, Employee, Client, Revenue, Expense, Budget } = require('./src/models');
+  const { initDashboardSocket } = require('./src/sockets/dashboardSocket');
+  const bcrypt = require('bcryptjs');
+  const { startBackupJob } = require('./src/jobs/backupJob');
 
-// Initialize Socket.io
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
-initDashboardSocket(io);
-app.set('io', io);
+  const PORT = process.env.PORT || 5000;
+  const server = http.createServer(app);
+
+  // Initialize Socket.io
+  const io = new Server(server, {
+    cors: {
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      methods: ['GET', 'POST'],
+      credentials: true
+    }
+  });
+  initDashboardSocket(io);
+  app.set('io', io);
 
 // Automated Seeder Function
 async function runSeeders() {
@@ -141,3 +144,21 @@ server.listen(PORT, () => {
 
 // Try to connect to database asynchronously
 connectDatabase();
+
+} catch (err) {
+  console.error('FATAL ERROR - Application initialization failed:', err.message);
+  console.error(err.stack);
+  // Exit gracefully
+  process.exit(1);
+}
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err.message);
+  console.error(err.stack);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
