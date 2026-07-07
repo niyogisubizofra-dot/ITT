@@ -5,7 +5,7 @@ import {
   Bell, MessageSquare, Zap, LogOut, Home, Menu, X, Search,
   CheckCircle2, XCircle, ArrowRight, ArrowUpRight, ArrowDownRight,
   Send, Image, Loader2, Megaphone, ShieldCheck, Ban, Eye,
-  RefreshCw
+  RefreshCw, UserPlus
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -74,6 +74,8 @@ const AdminDashboard = () => {
     { name: 'Staff', value: 30 },
     { name: 'Partners', value: 15 }
   ]);
+  // Track newly registered users for a live toast
+  const [newUserAlert, setNewUserAlert] = useState(null);
 
   useEffect(() => {
     axios.get('/api/admin/stats')
@@ -84,6 +86,39 @@ const AdminDashboard = () => {
       .then(res => setRevenueChart(res.data?.chart?.length ? res.data.chart : mockRevenueChart))
       .catch(() => setRevenueChart(mockRevenueChart));
   }, []);
+
+  // ── Real-time admin socket — stays alive for the full session ──────────────
+  useEffect(() => {
+    if (!user) return;
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
+    const adminSocket = io(socketUrl || undefined, {
+      withCredentials: true,
+      auth: { token: useAuthStore.getState().accessToken },
+    });
+
+    adminSocket.emit('joinAdmin'); // Join admin_room for role-gated events
+    adminSocket.emit('subscribeDashboard'); // Get dashboard broadcast events
+
+    adminSocket.on('newUser', (newUser) => {
+      // Prepend to users list (visible immediately in Users tab)
+      setUsers(prev => {
+        if (prev.some(u => u.id === newUser.id)) return prev;
+        return [newUser, ...prev];
+      });
+      // Increment totalUsers counter on overview
+      setStats(prev => ({ ...prev, totalUsers: (prev.totalUsers || 0) + 1 }));
+      // Show live alert toast
+      setNewUserAlert(newUser);
+      setTimeout(() => setNewUserAlert(null), 6000);
+    });
+
+    adminSocket.on('transactionApproved', () => {
+      // Refresh stats when a transaction is approved
+      axios.get('/api/admin/stats').then(res => setStats(res.data?.stats || {})).catch(() => {});
+    });
+
+    return () => adminSocket.disconnect();
+  }, [user]);
 
   useEffect(() => {
     setActiveTab(searchParams.get('tab') || 'overview');
@@ -99,16 +134,25 @@ const AdminDashboard = () => {
   }, [activeTab]);
 
   // Users state
-  const [users, setUsers] = useState(mockUsers);
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  const fetchUsers = () => {
+    setUsersLoading(true);
+    axios.get('/api/admin/users')
+      .then(res => {
+        // API returns a plain array
+        const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        setUsers(list);
+      })
+      .catch(() => setUsers(mockUsers))
+      .finally(() => setUsersLoading(false));
+  };
+
   useEffect(() => {
-    if (activeTab === 'users') {
-      axios.get('/api/admin/users')
-        .then(res => setUsers(res.data?.length ? res.data : mockUsers))
-        .catch(() => setUsers(mockUsers));
-    }
+    if (activeTab === 'users') fetchUsers();
   }, [activeTab]);
 
   const filteredUsers = useMemo(() => {
@@ -121,10 +165,10 @@ const AdminDashboard = () => {
   }, [users, userSearch, statusFilter]);
 
   const toggleUserStatus = (id) => {
-    setUsers(prev => prev.map(u => u.id === id
-      ? { ...u, status: u.status === 'active' ? 'suspended' : 'active' }
-      : u));
-    axios.post(`/api/admin/users/${id}/toggle-status`).catch(() => {});
+    const target = users.find(u => u.id === id);
+    const newStatus = target?.status === 'active' ? 'suspended' : 'active';
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u));
+    axios.post(`/api/admin/users/${id}/toggle-status`).catch(() => fetchUsers());
   };
 
   // Transactions state
@@ -307,6 +351,34 @@ const AdminDashboard = () => {
           className="fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
+      )}
+
+      {/* ── Live "New User Registered" toast ── */}
+      {newUserAlert && (
+        <div
+          className="fixed top-5 right-5 z-[100] w-80 bg-white rounded-2xl shadow-2xl border border-emerald-100 p-4 flex items-start gap-3 animate-[slideInRight_0.4s_ease]"
+          style={{ animation: 'slideInRight 0.4s ease' }}
+        >
+          <div className="p-2 rounded-xl bg-emerald-50 flex-shrink-0">
+            <UserPlus className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div className="min-w-0 flex-grow">
+            <p className="font-bold text-slate-800 text-sm">New User Registered!</p>
+            <p className="text-xs text-slate-600 font-medium truncate">{newUserAlert.username}</p>
+            <p className="text-xs text-slate-400 truncate">{newUserAlert.email}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <button onClick={() => setNewUserAlert(null)} className="text-slate-300 hover:text-slate-500 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => { setSearchParams({ tab: 'users' }); setNewUserAlert(null); }}
+              className="text-[10px] font-bold text-emerald-600 hover:underline"
+            >
+              View →
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Sidebar */}
@@ -492,7 +564,14 @@ const AdminDashboard = () => {
           {activeTab === 'users' && (
             <div className="fade-in bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-                <h2 className="text-2xl md:text-3xl font-black text-slate-800">Manage Users</h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl md:text-3xl font-black text-slate-800">Manage Users</h2>
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-emerald-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live
+                  </span>
+                  <span className="text-sm font-bold text-slate-400">{users.length} users</span>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -512,6 +591,14 @@ const AdminDashboard = () => {
                     <option value="active">Active</option>
                     <option value="suspended">Suspended</option>
                   </select>
+                  <button
+                    onClick={fetchUsers}
+                    disabled={usersLoading}
+                    className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                    title="Refresh users"
+                  >
+                    {usersLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 

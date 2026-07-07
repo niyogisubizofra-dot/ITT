@@ -59,8 +59,9 @@ exports.getRevenueChart = async (req, res, next) => {
 
 exports.getUsers = async (req, res, next) => {
   try {
-    const { limit, offset, page } = paginate(req.query);
     const { search, status } = req.query;
+    const limit = Math.min(200, parseInt(req.query.limit) || 200);
+    const offset = parseInt(req.query.offset) || 0;
 
     const where = {};
     if (status && status !== 'all') where.status = status;
@@ -79,18 +80,22 @@ exports.getUsers = async (req, res, next) => {
       order: [['createdAt', 'DESC']],
     });
 
-    // Attach investment count
+    // Attach investment count per user
     const usersWithInvestments = await Promise.all(
       rows.map(async (u) => {
         const investments = await Investment.count({ where: { userId: u.id } });
-        return { ...u.toJSON(), investments };
+        const raw = u.toJSON();
+        return {
+          ...raw,
+          balance: parseFloat(raw.balance) || 0,
+          joined: raw.createdAt,
+          investments,
+        };
       })
     );
 
-    res.json(paginatedResponse(usersWithInvestments, count, page, limit).data.length
-      ? paginatedResponse(usersWithInvestments, count, page, limit)
-      : usersWithInvestments
-    );
+    // Always return a plain array so frontend can safely use .length
+    res.json(usersWithInvestments);
   } catch (err) {
     next(err);
   }

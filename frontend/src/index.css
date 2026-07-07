@@ -100,3 +100,8 @@
 .animate-marquee:hover, .animate-slide-rtl:hover {
   animation-play-state: paused;
 }
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(100px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

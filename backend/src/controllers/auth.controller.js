@@ -7,35 +7,50 @@ const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = requir
 const { generateReferralCode } = require('../utils/helpers');
 const { sendPasswordReset, sendWelcome } = require('../services/email.service');
 const { createNotification } = require('../services/notification.service');
+const { emitDashboardUpdate } = require('../sockets');
 
 exports.register = async (req, res, next) => {
   try {
     const { username, email, password, ref } = req.body;
 
-    const exists = await User.findOne({ where: { email } });
-    if (exists) return res.status(400).json({ error: 'Email already registered' });
-
-    const usernameExists = await User.findOne({ where: { username } });
-    if (usernameExists) return res.status(400).json({ error: 'Username already taken' });
-
-    const hashed = await bcrypt.hash(password, 12);
-    const referralCode = generateReferralCode();
-
-    let referredBy = null;
-    if (ref) {
-      const referrer = await User.findOne({ where: { referralCode: ref } });
-      if (referrer) referredBy = referrer.id;
+    // Single query to check both email and username uniqueness
+    const { Op } = require('sequelize');
+    const existing = await User.findOne({ where: { [Op.or]: [{ email }, { username }] } });
+    if (existing) {
+      if (existing.email === email) return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: 'Username already taken' });
     }
+
+    // Run bcrypt hash and referral lookup in parallel
+    const [hashed, referrer] = await Promise.all([
+      bcrypt.hash(password, 10), // Cost 10: still secure, ~75% faster than 12
+      ref ? User.findOne({ where: { referralCode: ref } }) : Promise.resolve(null),
+    ]);
+
+    const referralCode = generateReferralCode();
+    const referredBy = referrer ? referrer.id : null;
 
     const user = await User.create({ username, email, password: hashed, referralCode, referredBy });
 
-    // Award referral bonuses if user was referred
+    // Notify admin dashboard in real time about the new registration
+    setImmediate(() => emitDashboardUpdate('newUser', {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      balance: parseFloat(user.balance) || 0,
+      status: user.status || 'active',
+      role: user.role,
+      referralCode: user.referralCode,
+      investments: 0,
+      joined: user.createdAt,
+    }));
+
+    // Award referral bonuses and send welcome email as background tasks (non-blocking)
     if (referredBy) {
       const { awardReferralBonus } = require('./referral.controller');
       setImmediate(() => awardReferralBonus(referredBy, user.id));
     }
-
-    await sendWelcome(email, username);
+    setImmediate(() => sendWelcome(email, username)); // Fire-and-forget — don't block response
 
     const accessToken = generateAccessToken(user);
     const refreshToken = await generateRefreshToken(user, req.ip);
