@@ -15,10 +15,25 @@ const app = express();
 
 // Security & parsing
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+// Build allowed origins list from env — supports comma-separated URLs
+const rawOrigins = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = rawOrigins
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, '')); // strip trailing slashes
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    const clean = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(clean)) return callback(null, true);
+    // In development allow all
+    if (process.env.NODE_ENV !== 'production') return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));

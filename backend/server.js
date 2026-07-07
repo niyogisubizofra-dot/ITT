@@ -12,6 +12,12 @@ initSocket(httpServer);
 
 const start = async () => {
   try {
+    // Guard: fail fast with a clear message if DB is not configured
+    if (!process.env.DATABASE_URL) {
+      logger.error('❌ DATABASE_URL environment variable is not set. Please add it in Render → Environment.');
+      process.exit(1);
+    }
+
     await sequelize.authenticate();
     logger.info('✅ Neon PostgreSQL connection established.');
 
