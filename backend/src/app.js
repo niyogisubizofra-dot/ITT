@@ -26,6 +26,13 @@ app.use(cors({
     // Allow requests with no origin (curl, Postman, server-to-server)
     if (!origin) return callback(null, true);
     const clean = origin.replace(/\/$/, '');
+    // Always allow localhost
+    if (clean.startsWith('http://localhost') || clean.startsWith('http://127.0.0.1')) {
+      return callback(null, true);
+    }
+    // Allow all *.vercel.app preview deployments
+    if (clean.endsWith('.vercel.app')) return callback(null, true);
+    // Check explicit list
     if (allowedOrigins.includes(clean)) return callback(null, true);
     // In development allow all
     if (process.env.NODE_ENV !== 'production') return callback(null, true);
