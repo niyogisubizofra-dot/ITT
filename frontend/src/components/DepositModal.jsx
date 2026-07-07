@@ -1,21 +1,26 @@
 import { useState } from 'react';
-import { X, Copy } from 'lucide-react';
+import { X, Copy, Loader2 } from 'lucide-react';
 import Logo from './Logo';
+import axios from 'axios';
 
 const DepositModal = ({ open, onClose, onDeposit, requiredAmount, requiredFor }) => {
   const [step, setStep] = useState('select'); // 'select' | 'qr' | 'upload'
   const [selected, setSelected] = useState(null);
   const [screenshotPreview, setScreenshotPreview] = useState(null);
   const [screenshotFile, setScreenshotFile] = useState(null);
+  const [notifyAmount, setNotifyAmount] = useState('');
+  const [notifyLoading, setNotifyLoading] = useState(false);
+  const [notifyMsg, setNotifyMsg] = useState('');
 
   if (!open) return null;
 
   const handleClose = () => {
-    // Reset state when closing
     setStep('select');
     setSelected(null);
     setScreenshotPreview(null);
     setScreenshotFile(null);
+    setNotifyAmount('');
+    setNotifyMsg('');
     onClose && onClose();
   };
 
@@ -148,6 +153,19 @@ const DepositModal = ({ open, onClose, onDeposit, requiredAmount, requiredFor })
             <h4 className="font-bold text-sm sm:text-base">Upload deposit screenshot</h4>
             <p className="text-xs sm:text-sm text-slate-400">Attach your transaction screenshot so admin can verify the deposit.</p>
 
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Amount deposited (USDT)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 100"
+                value={notifyAmount}
+                onChange={(e) => setNotifyAmount(e.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-white outline-none focus:border-emerald-400 text-sm"
+              />
+            </div>
+
             <div className="space-y-2">
               <input type="file" accept="image/*" onChange={handleFileChange} className="text-xs sm:text-sm text-slate-300 w-full" />
               {screenshotPreview && (
@@ -157,27 +175,40 @@ const DepositModal = ({ open, onClose, onDeposit, requiredAmount, requiredFor })
               )}
             </div>
 
-            <div className="flex items-center space-x-2">
-              <button onClick={copyImageToClipboard} className="w-full bg-slate-800 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-slate-700 transition font-bold text-xs sm:text-sm">
-                <Copy className="w-3 h-3 sm:w-4 sm:h-4 inline mr-1 sm:mr-2" /> Copy Screenshot
-              </button>
-            </div>
-
-            <div className="text-xs text-slate-400 bg-slate-800 p-2 sm:p-3 rounded-lg sm:rounded-xl">
-              Copy your screenshot to clipboard and submit it to the admin. Your deposit will be processed within 1-10 minutes.
-            </div>
+            {notifyMsg && (
+              <div className="bg-emerald-500/10 border border-emerald-500 text-emerald-400 px-3 py-2 rounded-xl text-xs">
+                {notifyMsg}
+              </div>
+            )}
 
             <button
-              onClick={() => {
-                onDeposit && onDeposit();
-                setStep('select');
-                setSelected(null);
-                setScreenshotPreview(null);
-                setScreenshotFile(null);
+              onClick={async () => {
+                setNotifyLoading(true);
+                try {
+                  await axios.post('/api/deposit/notify', {
+                    amount: parseFloat(notifyAmount) || 0,
+                    method: selected?.label || 'BEP20-USDT',
+                  });
+                  setNotifyMsg('✅ Deposit notification sent! Admin will verify and credit your account.');
+                  onDeposit && onDeposit();
+                } catch (err) {
+                  const d = err.response?.data;
+                  setNotifyMsg('⚠️ ' + ((typeof d?.error === 'string' && d.error) || d?.msg || 'Notification failed, but your deposit was recorded.'));
+                } finally {
+                  setNotifyLoading(false);
+                }
               }}
-              className="w-full mt-4 bg-emerald-500 text-slate-900 font-bold py-2 sm:py-3 rounded-lg sm:rounded-2xl hover:bg-emerald-600 transition text-sm sm:text-base"
+              disabled={notifyLoading}
+              className="w-full mt-2 bg-emerald-500 text-slate-900 font-bold py-2 sm:py-3 rounded-lg sm:rounded-2xl hover:bg-emerald-600 transition text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              Deposit Completed
+              {notifyLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Notifying Admin...</> : 'Deposit Completed — Notify Admin'}
+            </button>
+
+            <button
+              onClick={handleClose}
+              className="w-full bg-slate-700 py-2 rounded-lg text-xs text-slate-300 hover:bg-slate-600 transition"
+            >
+              Close
             </button>
           </div>
         )}

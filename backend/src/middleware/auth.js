@@ -1,22 +1,41 @@
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
+const { User } = require('../models');
 
-module.exports = function (req, res, next) {
-  // Get token from cookie or Authorization header
-  let token = req.cookies ? req.cookies.token : null;
-  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-    token = req.headers.authorization.split(' ')[1];
-  }
-
-  if (!token) {
-    return res.status(401).json({ msg: 'No token, authorization denied' });
-  }
-
+const authenticate = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretjwtkey_12345');
-    req.user = decoded.user;
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findByPk(decoded.id, {
+      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken'] },
+    });
+
+    if (!user || user.status === 'suspended') {
+      return res.status(401).json({ error: 'Account not found or suspended' });
+    }
+
+    req.user = user;
     next();
   } catch (err) {
-    res.status(401).json({ msg: 'Token is not valid' });
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
+
+// Role-based access control
+const authorize = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Access denied: insufficient permissions' });
+  }
+  next();
+};
+
+// CEO/Admin only shorthand
+const adminOnly = authorize('CEO', 'Chairman', 'Admin');
+const managerUp = authorize('CEO', 'Chairman', 'Admin', 'Manager');
+
+module.exports = { authenticate, authorize, adminOnly, managerUp };

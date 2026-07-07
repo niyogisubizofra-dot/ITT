@@ -1,133 +1,102 @@
-const sequelize = require('../config/db');
+'use strict';
+const { Sequelize } = require('sequelize');
+const sequelize = require('../config/database');
 
 // Import all models
-const User = require('./User');
-const Employee = require('./Employee');
-const Project = require('./Project');
-const ProjectTeam = require('./ProjectTeam');
-const Client = require('./Client');
-const Event = require('./Event');
-const Task = require('./Task');
-const Department = require('./Department');
-const Revenue = require('./Revenue');
-const Expense = require('./Expense');
-const Budget = require('./Budget');
-const Payroll = require('./Payroll');
-const Attendance = require('./Attendance');
-const LeaveRequest = require('./LeaveRequest');
-const Partnership = require('./Partnership');
-const Document = require('./Document');
-const Notification = require('./Notification');
-const ActivityLog = require('./ActivityLog');
-const Announcement = require('./Announcement');
-const Report = require('./Report');
-const Transaction = require('./Transaction');
-const Message = require('./Message');
+const User = require('./user.model')(sequelize);
+const Employee = require('./employee.model')(sequelize);
+const Department = require('./department.model')(sequelize);
+const Project = require('./project.model')(sequelize);
+const ProjectTeam = require('./projectTeam.model')(sequelize);
+const Client = require('./client.model')(sequelize);
+const Event = require('./event.model')(sequelize);
+const Task = require('./task.model')(sequelize);
+const Revenue = require('./revenue.model')(sequelize);
+const Expense = require('./expense.model')(sequelize);
+const Budget = require('./budget.model')(sequelize);
+const Payroll = require('./payroll.model')(sequelize);
+const Attendance = require('./attendance.model')(sequelize);
+const LeaveRequest = require('./leaveRequest.model')(sequelize);
+const Partnership = require('./partnership.model')(sequelize);
+const Document = require('./document.model')(sequelize);
+const Notification = require('./notification.model')(sequelize);
+const ActivityLog = require('./activityLog.model')(sequelize);
+const Announcement = require('./announcement.model')(sequelize);
+const Report = require('./report.model')(sequelize);
+const Message = require('./message.model')(sequelize);
+const Transaction = require('./transaction.model')(sequelize);
+const Investment = require('./investment.model')(sequelize);
+const RefreshToken = require('./refreshToken.model')(sequelize);
 
-// --- Associations ---
+// ── Associations ──────────────────────────────────────────────────────────────
 
-// User <-> Employee (One-to-One)
-User.hasOne(Employee, { foreignKey: 'userId', as: 'employeeProfile', onDelete: 'CASCADE' });
-Employee.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+// User ↔ Transaction / Investment / RefreshToken / Notification / ActivityLog
+User.hasMany(Transaction, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Transaction.belongsTo(User, { foreignKey: 'userId' });
 
-// Employee <-> Department (Many-to-One)
-Department.hasMany(Employee, { foreignKey: 'departmentId', as: 'employees', onDelete: 'SET NULL' });
-Employee.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
+User.hasMany(Investment, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Investment.belongsTo(User, { foreignKey: 'userId' });
 
-// Department <-> User (Manager) (Many-to-One)
-User.hasMany(Department, { foreignKey: 'managerId', as: 'managedDepartments', onDelete: 'SET NULL' });
-Department.belongsTo(User, { foreignKey: 'managerId', as: 'manager' });
+User.hasMany(RefreshToken, { foreignKey: 'userId', onDelete: 'CASCADE' });
+RefreshToken.belongsTo(User, { foreignKey: 'userId' });
 
-// Project <-> Client (Many-to-One)
-Client.hasMany(Project, { foreignKey: 'clientId', as: 'projects', onDelete: 'SET NULL' });
-Project.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
+User.hasMany(Notification, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Notification.belongsTo(User, { foreignKey: 'userId' });
 
-// Project <-> Employee (Many-to-Many via ProjectTeam)
-Project.belongsToMany(Employee, { through: ProjectTeam, foreignKey: 'projectId', as: 'teamMembers' });
-Employee.belongsToMany(Project, { through: ProjectTeam, foreignKey: 'employeeId', as: 'assignedProjects' });
-ProjectTeam.belongsTo(Project, { foreignKey: 'projectId' });
-ProjectTeam.belongsTo(Employee, { foreignKey: 'employeeId' });
+User.hasMany(ActivityLog, { foreignKey: 'userId', onDelete: 'SET NULL' });
+ActivityLog.belongsTo(User, { foreignKey: 'userId' });
 
-// Project <-> Task (One-to-Many)
-Project.hasMany(Task, { foreignKey: 'projectId', as: 'tasks', onDelete: 'CASCADE' });
-Task.belongsTo(Project, { foreignKey: 'projectId', as: 'project' });
-
-// Employee <-> Task (One-to-Many)
-Employee.hasMany(Task, { foreignKey: 'assigneeId', as: 'tasks', onDelete: 'SET NULL' });
-Task.belongsTo(Employee, { foreignKey: 'assigneeId', as: 'assignee' });
-
-// Event <-> User (Organizer) (Many-to-One)
-User.hasMany(Event, { foreignKey: 'organizerId', as: 'organizedEvents', onDelete: 'SET NULL' });
-Event.belongsTo(User, { foreignKey: 'organizerId', as: 'organizer' });
-
-// Expense <-> User (Approver) (Many-to-One)
-User.hasMany(Expense, { foreignKey: 'approvedById', as: 'approvedExpenses', onDelete: 'SET NULL' });
-Expense.belongsTo(User, { foreignKey: 'approvedById', as: 'approvedBy' });
-
-// Employee <-> Payroll (One-to-Many)
-Employee.hasMany(Payroll, { foreignKey: 'employeeId', as: 'payrolls', onDelete: 'CASCADE' });
-Payroll.belongsTo(Employee, { foreignKey: 'employeeId', as: 'employee' });
-
-// Employee <-> Attendance (One-to-Many)
-Employee.hasMany(Attendance, { foreignKey: 'employeeId', as: 'attendanceLogs', onDelete: 'CASCADE' });
-Attendance.belongsTo(Employee, { foreignKey: 'employeeId', as: 'employee' });
-
-// Employee <-> LeaveRequest (One-to-Many)
-Employee.hasMany(LeaveRequest, { foreignKey: 'employeeId', as: 'leaveRequests', onDelete: 'CASCADE' });
-LeaveRequest.belongsTo(Employee, { foreignKey: 'employeeId', as: 'employee' });
-
-// LeaveRequest <-> User (Approver) (Many-to-One)
-User.hasMany(LeaveRequest, { foreignKey: 'approvedById', as: 'approvedLeaves', onDelete: 'SET NULL' });
-LeaveRequest.belongsTo(User, { foreignKey: 'approvedById', as: 'approvedBy' });
-
-// Document <-> Project (Many-to-One)
-Project.hasMany(Document, { foreignKey: 'projectId', as: 'documents', onDelete: 'CASCADE' });
-Document.belongsTo(Project, { foreignKey: 'projectId', as: 'project' });
-
-// Document <-> User (Uploader) (Many-to-One)
-User.hasMany(Document, { foreignKey: 'uploadedById', as: 'documents', onDelete: 'SET NULL' });
-Document.belongsTo(User, { foreignKey: 'uploadedById', as: 'uploadedBy' });
-
-// Notification <-> User (One-to-Many)
-User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications', onDelete: 'CASCADE' });
-Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
-// ActivityLog <-> User (One-to-Many)
-User.hasMany(ActivityLog, { foreignKey: 'userId', as: 'activityLogs', onDelete: 'CASCADE' });
-ActivityLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
-// Announcement <-> User (Creator) (Many-to-One)
-User.hasMany(Announcement, { foreignKey: 'createdById', as: 'announcements', onDelete: 'SET NULL' });
-Announcement.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
-
-// Report <-> User (Creator) (Many-to-One)
-User.hasMany(Report, { foreignKey: 'createdById', as: 'reports', onDelete: 'SET NULL' });
-Report.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
-
-// Transaction <-> User (One-to-Many)
-User.hasMany(Transaction, { foreignKey: 'userId', as: 'transactions', onDelete: 'CASCADE' });
-Transaction.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
-// User Referral self-association
-User.belongsTo(User, { foreignKey: 'referredBy', as: 'referrer' });
-User.hasMany(User, { foreignKey: 'referredBy', as: 'referrals' });
-
-// Message associations
-User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages', onDelete: 'CASCADE' });
-User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages', onDelete: 'CASCADE' });
+// Messages (self-referencing User)
+User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
+User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
 Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
 Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
 
+// Department ↔ Employee
+Department.hasMany(Employee, { foreignKey: 'departmentId', onDelete: 'SET NULL' });
+Employee.belongsTo(Department, { foreignKey: 'departmentId' });
+
+// Employee ↔ Attendance / LeaveRequest / Payroll
+Employee.hasMany(Attendance, { foreignKey: 'employeeId', onDelete: 'CASCADE' });
+Attendance.belongsTo(Employee, { foreignKey: 'employeeId' });
+
+Employee.hasMany(LeaveRequest, { foreignKey: 'employeeId', onDelete: 'CASCADE' });
+LeaveRequest.belongsTo(Employee, { foreignKey: 'employeeId' });
+
+Employee.hasMany(Payroll, { foreignKey: 'employeeId', onDelete: 'CASCADE' });
+Payroll.belongsTo(Employee, { foreignKey: 'employeeId' });
+
+// Project ↔ Task / ProjectTeam / Document / Client
+Project.hasMany(Task, { foreignKey: 'projectId', onDelete: 'CASCADE' });
+Task.belongsTo(Project, { foreignKey: 'projectId' });
+
+Project.hasMany(ProjectTeam, { foreignKey: 'projectId', onDelete: 'CASCADE' });
+ProjectTeam.belongsTo(Project, { foreignKey: 'projectId' });
+
+Employee.hasMany(ProjectTeam, { foreignKey: 'employeeId', onDelete: 'CASCADE' });
+ProjectTeam.belongsTo(Employee, { foreignKey: 'employeeId' });
+
+Project.hasMany(Document, { foreignKey: 'projectId', onDelete: 'SET NULL', constraints: false });
+Document.belongsTo(Project, { foreignKey: 'projectId', constraints: false });
+
+Client.hasMany(Project, { foreignKey: 'clientId', onDelete: 'SET NULL' });
+Project.belongsTo(Client, { foreignKey: 'clientId' });
+
+// Budget optional FK (project or department)
+Budget.belongsTo(Project, { foreignKey: 'projectId', constraints: false });
+Budget.belongsTo(Department, { foreignKey: 'departmentId', constraints: false });
+
 module.exports = {
   sequelize,
+  Sequelize,
   User,
   Employee,
+  Department,
   Project,
   ProjectTeam,
   Client,
   Event,
   Task,
-  Department,
   Revenue,
   Expense,
   Budget,
@@ -140,6 +109,8 @@ module.exports = {
   ActivityLog,
   Announcement,
   Report,
+  Message,
   Transaction,
-  Message
+  Investment,
+  RefreshToken,
 };

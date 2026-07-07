@@ -1,37 +1,22 @@
-const swaggerJSDoc = require('swagger-jsdoc');
+const swaggerJsdoc = require('swagger-jsdoc');
 
 const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Enterprise Management System API',
+      title: 'INVEST Admin Dashboard API',
       version: '1.0.0',
-      description: 'Production-Ready Backend API for EMS, including Authentication, CEO Dashboard, Employee Management, Projects, Finances, Sockets, and Security Logs.',
+      description: 'Complete REST API for INVEST Admin Dashboard',
     },
-    servers: [
-      {
-        url: 'http://localhost:5000',
-        description: 'Development server',
-      },
-    ],
+    servers: [{ url: `http://localhost:${process.env.PORT || 5000}` }],
     components: {
       securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-        },
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       },
     },
-    security: [
-      {
-        bearerAuth: [],
-      },
-    ],
+    security: [{ bearerAuth: [] }],
   },
-  apis: ['./src/routes/*.js'], // Scan routes for JSDoc documentation
+  apis: ['./src/routes/*.js'],
 };
 
-const swaggerSpec = swaggerJSDoc(options);
-
-module.exports = swaggerSpec;
+module.exports = swaggerJsdoc(options);

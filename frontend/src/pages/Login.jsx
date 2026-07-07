@@ -33,9 +33,16 @@ const Login = () => {
       }
     } catch (err) {
       const status = err.response?.status;
-      const dataMsg = err.response?.data?.msg || err.response?.data?.error?.message || err.response?.data?.message;
+      const data = err.response?.data;
+      // Extract message from various backend response shapes
+      const dataMsg =
+        (Array.isArray(data?.errors) && data.errors[0]?.message) ||
+        (typeof data?.error === 'string' && data.error) ||
+        data?.msg ||
+        data?.message ||
+        data?.error?.message;
       let errMsg = '';
-      
+
       if (status === 500) {
         errMsg = `Server Error (500): ${dataMsg || 'Internal Server Error. Please verify your backend server is running and database connection is active.'}`;
       } else if (status === 400 || status === 401 || status === 403 || status === 404) {

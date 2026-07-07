@@ -1,98 +1,73 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const cookieParser = require('cookie-parser');
+const helmet = require('helmet');
+const compression = require('compression');
+const morgan = require('morgan');
 const path = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
-const errorHandler = require('./middleware/errorHandler');
-
-// Import routes
-const authRoutes = require('./routes/auth');
-const dashboardRoutes = require('./routes/dashboard');
-const employeeRoutes = require('./routes/employee');
-const projectRoutes = require('./routes/project');
-const financeRoutes = require('./routes/finance');
-const clientRoutes = require('./routes/client');
-const partnershipRoutes = require('./routes/partnership');
-const documentRoutes = require('./routes/document');
-const communicationRoutes = require('./routes/communication');
-const securityRoutes = require('./routes/security');
-const eventRoutes = require('./routes/event');
-const investRoutes = require('./routes/invest');
-const referralsRoutes = require('./routes/referrals');
-const chatRoutes = require('./routes/chat');
-const managerRoutes = require('./routes/manager');
-const adminRoutes = require('./routes/admin');
+const { errorHandler, notFound } = require('./middleware/errorHandler');
+const rateLimiter = require('./middleware/rateLimiter');
+const logger = require('./utils/logger');
 
 const app = express();
 
-// Middlewares
+// Security & parsing
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 
-// API Swagger Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// Bind routes
-app.use('/api/auth', authRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/employees', employeeRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/finance', financeRoutes);
-app.use('/api/clients', clientRoutes);
-app.use('/api/partnerships', partnershipRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/communications', communicationRoutes);
-app.use('/api/security', securityRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/invest', investRoutes);
-app.use('/api/referrals', referralsRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/manager', managerRoutes);
-app.use('/api/admin', adminRoutes);
-
-// Health and status endpoints for deployment checks
-app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'INVEST backend API',
-    docs: '/api-docs',
-    health: '/health'
-  });
-});
-
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
-
-// Static directories
+// Static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.static(path.join(__dirname, '../../frontend/dist')));
 
-// Serve frontend single-page application catch-all
-app.get(/(.*)/, (req, res, next) => {
-  const indexPath = path.resolve(__dirname, '../../frontend/dist', 'index.html');
-  if (require('fs').existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    // If static files are not present (backend-only mode on Render),
-    // redirect web browser traffic to the Vercel frontend
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads') && !req.path.startsWith('/api-docs')) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      // Remove trailing slash from frontendUrl if present to avoid double slashes
-      const cleanFrontendUrl = frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl;
-      return res.redirect(301, cleanFrontendUrl + req.originalUrl);
-    }
-    next();
-  }
-});
+// Rate limiting
+app.use('/api/auth', rateLimiter.auth);
+app.use('/api', rateLimiter.api);
 
-// Centralized error handler
+// Swagger docs
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Routes
+app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/users', require('./routes/user.routes'));
+app.use('/api/employees', require('./routes/employee.routes'));
+app.use('/api/projects', require('./routes/project.routes'));
+app.use('/api/clients', require('./routes/client.routes'));
+app.use('/api/events', require('./routes/event.routes'));
+app.use('/api/tasks', require('./routes/task.routes'));
+app.use('/api/departments', require('./routes/department.routes'));
+app.use('/api/revenue', require('./routes/revenue.routes'));
+app.use('/api/expenses', require('./routes/expense.routes'));
+app.use('/api/budgets', require('./routes/budget.routes'));
+app.use('/api/payroll', require('./routes/payroll.routes'));
+app.use('/api/attendance', require('./routes/attendance.routes'));
+app.use('/api/leaves', require('./routes/leave.routes'));
+app.use('/api/partnerships', require('./routes/partnership.routes'));
+app.use('/api/documents', require('./routes/document.routes'));
+app.use('/api/notifications', require('./routes/notification.routes'));
+app.use('/api/announcements', require('./routes/announcement.routes'));
+app.use('/api/reports', require('./routes/report.routes'));
+app.use('/api/dashboard', require('./routes/dashboard.routes'));
+app.use('/api/admin', require('./routes/admin.routes'));
+
+// ── Client-facing routes ──────────────────────────────────────────────────────
+app.use('/api/invest', require('./routes/invest.routes'));
+app.use('/api/referrals', require('./routes/referral.routes'));
+app.use('/api/chat', require('./routes/chat.routes'));
+app.use('/api/withdraw', require('./routes/withdraw.routes'));
+app.use('/api/deposit', require('./routes/deposit.routes'));
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+
+app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
