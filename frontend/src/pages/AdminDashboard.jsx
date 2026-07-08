@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import useAuthStore from '../store/authStore';
+import useAdminStore from '../store/adminStore';
 import {
   LayoutDashboard, Users, Wallet, TrendingUp, DollarSign, CreditCard,
   Bell, MessageSquare, Zap, LogOut, Home, Menu, X, Search,
@@ -12,50 +13,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
-// ---- Fallback mock data (used only if the API call fails or returns nothing) ----
-const mockAdminStats = {
-  totalUsers: 1284,
-  totalDeposits: 182430.55,
-  totalWithdrawals: 96210.10,
-  platformBalance: 412980.75,
-  activeInvestments: 341,
-};
-
-const mockRevenueChart = [
-  { name: 'Mon', deposits: 4200, withdrawals: 2100 },
-  { name: 'Tue', deposits: 5800, withdrawals: 3000 },
-  { name: 'Wed', deposits: 3900, withdrawals: 2600 },
-  { name: 'Thu', deposits: 7200, withdrawals: 4100 },
-  { name: 'Fri', deposits: 6100, withdrawals: 3300 },
-  { name: 'Sat', deposits: 4700, withdrawals: 2000 },
-  { name: 'Sun', deposits: 8300, withdrawals: 5200 },
-];
-
-const mockUsers = [
-  { id: 1, username: 'j.miller', email: 'j.miller@mail.com', balance: 4210.50, status: 'active', joined: '2026-02-14', investments: 3 },
-  { id: 2, username: 'sara_k', email: 'sara.k@mail.com', balance: 980.00, status: 'active', joined: '2026-03-02', investments: 1 },
-  { id: 3, username: 'tundeinvest', email: 'tunde.i@mail.com', balance: 15230.75, status: 'suspended', joined: '2026-01-22', investments: 5 },
-  { id: 4, username: 'amara.b', email: 'amara.b@mail.com', balance: 210.20, status: 'active', joined: '2026-04-18', investments: 0 },
-  { id: 5, username: 'chris_trades', email: 'chris.trades@mail.com', balance: 6789.00, status: 'active', joined: '2026-05-01', investments: 2 },
-];
-
-const mockPendingTransactions = [
-  { id: 101, user: 'j.miller', type: 'deposit', amount: 500.00, method: 'Bank Transfer', date: '2026-07-05T14:20:00Z' },
-  { id: 102, user: 'sara_k', type: 'withdrawal', amount: 200.00, method: 'Crypto (USDT)', date: '2026-07-05T16:05:00Z' },
-  { id: 103, user: 'chris_trades', type: 'withdrawal', amount: 1500.00, method: 'Bank Transfer', date: '2026-07-06T08:40:00Z' },
-  { id: 104, user: 'amara.b', type: 'deposit', amount: 50.00, method: 'Card', date: '2026-07-06T09:15:00Z' },
-];
-
-const mockInvestments = [
-  { id: 201, user: 'j.miller', plan: 'Growth Plan', invested: 1000, dailyProfit: 45, status: 'active' },
-  { id: 202, user: 'tundeinvest', plan: 'Premium Plan', invested: 5000, dailyProfit: 260, status: 'active' },
-  { id: 203, user: 'chris_trades', plan: 'Starter Plan', invested: 300, dailyProfit: 12, status: 'completed' },
-];
-
-const mockBroadcasts = [
-  { id: 1, message: 'System maintenance completed successfully. All trading pairs are now live.', date: '2026-07-04T10:00:00Z' },
-  { id: 2, message: 'New Premium investment plan is now available with higher daily returns.', date: '2026-06-28T09:30:00Z' },
-];
 
 const AdminDashboard = () => {
   const user = useAuthStore((state) => state.user);
@@ -66,28 +23,52 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Overview state
-  const [stats, setStats] = useState(mockAdminStats);
-  const [revenueChart, setRevenueChart] = useState(mockRevenueChart);
-  const [pieData, setPieData] = useState([
+  // ── Admin store (cached data) ─────────────────────────────────────────────────────────
+  const stats = useAdminStore((s) => s.stats);
+  const revenueChart = useAdminStore((s) => s.revenueChart);
+  const users = useAdminStore((s) => s.users);
+  const usersLoading = useAdminStore((s) => s.usersLoading);
+  const pendingTx = useAdminStore((s) => s.pendingTx);
+  const investments = useAdminStore((s) => s.investments);
+  const broadcasts = useAdminStore((s) => s.broadcasts);
+  const conversations = useAdminStore((s) => s.conversations);
+  const chatHistories = useAdminStore((s) => s.chatHistories);
+
+  const fetchStats = useAdminStore((s) => s.fetchStats);
+  const fetchRevenueChart = useAdminStore((s) => s.fetchRevenueChart);
+  const fetchUsers = useAdminStore((s) => s.fetchUsers);
+  const fetchPendingTx = useAdminStore((s) => s.fetchPendingTx);
+  const fetchInvestments = useAdminStore((s) => s.fetchInvestments);
+  const fetchBroadcasts = useAdminStore((s) => s.fetchBroadcasts);
+  const fetchConversations = useAdminStore((s) => s.fetchConversations);
+  const fetchChatHistory = useAdminStore((s) => s.fetchChatHistory);
+  const prependUser = useAdminStore((s) => s.prependUser);
+  const patchStats = useAdminStore((s) => s.patchStats);
+  const patchUserStatus = useAdminStore((s) => s.patchUserStatus);
+  const removePendingTx = useAdminStore((s) => s.removePendingTx);
+  const prependBroadcast = useAdminStore((s) => s.prependBroadcast);
+  const upsertConversation = useAdminStore((s) => s.upsertConversation);
+  const markConversationRead = useAdminStore((s) => s.markConversationRead);
+  const appendAdminChatMessage = useAdminStore((s) => s.appendChatMessage);
+  const invalidateStats = useAdminStore((s) => s.invalidateStats);
+
+  // ── Pie chart (static) ──────────────────────────────────────────────────────────────────────
+  const [pieData] = useState([
     { name: 'Clients', value: 55 },
     { name: 'Staff', value: 30 },
     { name: 'Partners', value: 15 }
   ]);
+
   // Track newly registered users for a live toast
   const [newUserAlert, setNewUserAlert] = useState(null);
 
+  // Fetch overview data on mount (cached — only runs once unless TTL expires)
   useEffect(() => {
-    axios.get('/api/admin/stats')
-      .then(res => setStats(res.data?.stats || mockAdminStats))
-      .catch(() => setStats(mockAdminStats));
-
-    axios.get('/api/admin/revenue-chart')
-      .then(res => setRevenueChart(res.data?.chart?.length ? res.data.chart : mockRevenueChart))
-      .catch(() => setRevenueChart(mockRevenueChart));
+    fetchStats();
+    fetchRevenueChart();
   }, []);
 
-  // ── Real-time admin socket — stays alive for the full session ──────────────
+  // ── Real-time admin socket — stays alive for the full session ──────────────────
   useEffect(() => {
     if (!user) return;
     const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
@@ -96,25 +77,23 @@ const AdminDashboard = () => {
       auth: { token: useAuthStore.getState().accessToken },
     });
 
-    adminSocket.emit('joinAdmin'); // Join admin_room for role-gated events
-    adminSocket.emit('subscribeDashboard'); // Get dashboard broadcast events
+    adminSocket.emit('joinAdmin');
+    adminSocket.emit('subscribeDashboard');
 
     adminSocket.on('newUser', (newUser) => {
-      // Prepend to users list (visible immediately in Users tab)
-      setUsers(prev => {
-        if (prev.some(u => u.id === newUser.id)) return prev;
-        return [newUser, ...prev];
-      });
-      // Increment totalUsers counter on overview
-      setStats(prev => ({ ...prev, totalUsers: (prev.totalUsers || 0) + 1 }));
+      // Update the store — visible immediately in Users tab
+      prependUser(newUser);
+      // Increment totalUsers in cached stats
+      patchStats({ totalUsers: (useAdminStore.getState().stats.totalUsers || 0) + 1 });
       // Show live alert toast
       setNewUserAlert(newUser);
       setTimeout(() => setNewUserAlert(null), 6000);
     });
 
     adminSocket.on('transactionApproved', () => {
-      // Refresh stats when a transaction is approved
-      axios.get('/api/admin/stats').then(res => setStats(res.data?.stats || {})).catch(() => {});
+      // Force-invalidate stats cache and re-fetch
+      invalidateStats();
+      fetchStats(true);
     });
 
     return () => adminSocket.disconnect();
@@ -133,23 +112,9 @@ const AdminDashboard = () => {
     }
   }, [activeTab]);
 
-  // Users state
-  const [users, setUsers] = useState([]);
-  const [usersLoading, setUsersLoading] = useState(false);
+  // ── Users ─────────────────────────────────────────────────────────────────────────────────
   const [userSearch, setUserSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-
-  const fetchUsers = () => {
-    setUsersLoading(true);
-    axios.get('/api/admin/users')
-      .then(res => {
-        // API returns a plain array
-        const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-        setUsers(list);
-      })
-      .catch(() => setUsers(mockUsers))
-      .finally(() => setUsersLoading(false));
-  };
 
   useEffect(() => {
     if (activeTab === 'users') fetchUsers();
@@ -167,48 +132,33 @@ const AdminDashboard = () => {
   const toggleUserStatus = (id) => {
     const target = users.find(u => u.id === id);
     const newStatus = target?.status === 'active' ? 'suspended' : 'active';
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u));
-    axios.post(`/api/admin/users/${id}/toggle-status`).catch(() => fetchUsers());
+    // Optimistic update in store
+    patchUserStatus(id, newStatus);
+    axios.post(`/api/admin/users/${id}/toggle-status`).catch(() => fetchUsers(true));
   };
 
-  // Transactions state
-  const [pendingTx, setPendingTx] = useState(mockPendingTransactions);
-
+  // ── Transactions ───────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab === 'transactions') {
-      axios.get('/api/admin/transactions/pending')
-        .then(res => setPendingTx(res.data?.length ? res.data : mockPendingTransactions))
-        .catch(() => setPendingTx(mockPendingTransactions));
-    }
+    if (activeTab === 'transactions') fetchPendingTx();
   }, [activeTab]);
 
   const handleTxDecision = (id, decision) => {
-    setPendingTx(prev => prev.filter(t => t.id !== id));
+    // Optimistic removal from store
+    removePendingTx(id);
     axios.post(`/api/admin/transactions/${id}/${decision}`).catch(() => {});
   };
 
-  // Investments state
-  const [investments, setInvestments] = useState(mockInvestments);
-
+  // ── Investments ──────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab === 'investments') {
-      axios.get('/api/admin/investments')
-        .then(res => setInvestments(res.data?.length ? res.data : mockInvestments))
-        .catch(() => setInvestments(mockInvestments));
-    }
+    if (activeTab === 'investments') fetchInvestments();
   }, [activeTab]);
 
-  // Broadcast state
-  const [broadcasts, setBroadcasts] = useState(mockBroadcasts);
+  // ── Broadcasts ───────────────────────────────────────────────────────────────────────
   const [broadcastText, setBroadcastText] = useState('');
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
 
   useEffect(() => {
-    if (activeTab === 'broadcast') {
-      axios.get('/api/admin/broadcasts')
-        .then(res => setBroadcasts(res.data?.length ? res.data : mockBroadcasts))
-        .catch(() => setBroadcasts(mockBroadcasts));
-    }
+    if (activeTab === 'broadcast') fetchBroadcasts();
   }, [activeTab]);
 
   const sendBroadcast = async () => {
@@ -218,42 +168,35 @@ const AdminDashboard = () => {
     try {
       await axios.post('/api/admin/broadcasts', { message: broadcastText });
     } catch (err) {
-      // still reflect locally even if the request fails, admin can retry the network call later
+      // still reflect locally even if the request fails
     } finally {
-      setBroadcasts(prev => [newBroadcast, ...prev]);
+      prependBroadcast(newBroadcast);
       setBroadcastText('');
       setIsSendingBroadcast(false);
     }
   };
 
-  // Support chat state (multi-conversation)
-  const [conversations, setConversations] = useState([
-    { userId: 1, username: 'j.miller', lastMessage: 'Is my withdrawal processed yet?', unread: 2, time: '10:24 AM' },
-    { userId: 2, username: 'sara_k', lastMessage: 'Thanks for the quick help!', unread: 0, time: 'Yesterday' },
-    { userId: 5, username: 'chris_trades', lastMessage: 'Can I upgrade my plan?', unread: 1, time: 'Yesterday' },
-  ]);
+  // ── Chat (multi-conversation) ──────────────────────────────────────────────────────
   const [activeConversation, setActiveConversation] = useState(null);
-  const [chatMessages, setChatMessages] = useState([]);
+  // Derive current chat messages from the per-userId cache in the store
+  const chatMessages = activeConversation
+    ? (chatHistories[activeConversation.userId] || [])
+    : [];
   const [chatInput, setChatInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [socket, setSocket] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Fetch chat history for the active conversation (cached per userId)
   useEffect(() => {
     if (activeTab === 'chat' && activeConversation) {
-      axios.get(`/api/admin/chat/history/${activeConversation.userId}`)
-        .then(res => setChatMessages(res.data?.length ? res.data : []))
-        .catch(() => setChatMessages([]));
+      fetchChatHistory(activeConversation.userId);
     }
   }, [activeTab, activeConversation]);
 
-  // Load conversations list when opening chat tab
+  // Fetch conversations list when opening chat tab (light TTL: 30s)
   useEffect(() => {
-    if (activeTab === 'chat') {
-      axios.get('/api/admin/conversations')
-        .then(res => setConversations(res.data?.length ? res.data : conversations))
-        .catch(() => {});
-    }
+    if (activeTab === 'chat') fetchConversations();
   }, [activeTab]);
 
   useEffect(() => {
@@ -265,27 +208,12 @@ const AdminDashboard = () => {
       newSocket.emit('joinChat', user.id);
 
       newSocket.on('receiveChatMessage', (message) => {
-        setChatMessages((prev) => {
-          if (prev.some(m => m.id === message.id)) return prev;
-          if (activeConversation && message.senderId !== activeConversation.userId) return prev.concat(message);
-          return prev.concat(message);
-        });
-
-        // Update conversations list/unread count
-        setConversations(prev => {
-          const fromUser = message.senderId === user?.id ? message.receiverId : message.senderId;
-          const existing = prev.find(c => c.userId === fromUser);
-          if (existing) {
-            return prev.map(c => c.userId === fromUser ? {
-              ...c,
-              lastMessage: message.text || 'Attachment',
-              unread: activeConversation?.userId === fromUser ? 0 : (c.unread || 0) + 1,
-              time: 'Now'
-            } : c);
-          }
-          const newConv = { userId: fromUser, username: message.senderName || `User ${fromUser}`, lastMessage: message.text || 'Attachment', unread: 1, time: 'Now' };
-          return [newConv, ...prev];
-        });
+        const fromUser =
+          message.senderId === user?.id ? message.receiverId : message.senderId;
+        // Append to the correct per-user chat history in the store
+        appendAdminChatMessage(fromUser, message);
+        // Update conversation list (unread badge, last message preview)
+        upsertConversation(message, user?.id);
       });
 
       return () => newSocket.disconnect();
@@ -299,9 +227,16 @@ const AdminDashboard = () => {
         receiverId: activeConversation.userId,
         senderId: user?.id,
         text,
-        image: imageUrl
+        image: imageUrl,
       });
-      setChatMessages(prev => [...prev, { senderId: user?.id, senderName: 'Support Agent', text, image: imageUrl, createdAt: new Date().toISOString() }]);
+      // Optimistically add to local cache so it shows immediately
+      appendAdminChatMessage(activeConversation.userId, {
+        senderId: user?.id,
+        senderName: 'Support Agent',
+        text,
+        image: imageUrl,
+        createdAt: new Date().toISOString(),
+      });
       setChatInput('');
     } catch (err) {
       alert('Failed to send message.');
@@ -816,7 +751,7 @@ const AdminDashboard = () => {
                       key={c.userId}
                       onClick={() => {
                         setActiveConversation(c);
-                        setConversations(prev => prev.map(x => x.userId === c.userId ? { ...x, unread: 0 } : x));
+                        markConversationRead(c.userId);
                       }}
                       className={`w-full flex items-center gap-3 p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left ${
                         activeConversation?.userId === c.userId ? 'bg-blue-50/60' : ''

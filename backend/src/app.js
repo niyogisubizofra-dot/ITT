@@ -47,8 +47,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 
-// Static uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Static uploads — cached by browser for 1 hour to avoid re-downloading files
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiting
 app.use('/api/auth', rateLimiter.auth);
@@ -87,7 +90,10 @@ app.use('/api/chat', require('./routes/chat.routes'));
 app.use('/api/withdraw', require('./routes/withdraw.routes'));
 app.use('/api/deposit', require('./routes/deposit.routes'));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+app.get('/api/health', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ status: 'ok', timestamp: new Date() });
+});
 
 app.use(notFound);
 app.use(errorHandler);

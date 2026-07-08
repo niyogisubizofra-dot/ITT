@@ -13,6 +13,9 @@ const setAuthHeader = (token) => {
   }
 };
 
+// Skip re-fetching /api/auth/user if the user object was validated < 3 minutes ago
+const USER_TTL_MS = 3 * 60 * 1000;
+
 const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -21,33 +24,58 @@ const useAuthStore = create(
       refreshToken: null,
       activeInvestments: [],
       loading: true,
+      // Track when we last confirmed the user from the server
+      userVerifiedAt: null,
 
       checkUser: async () => {
+        const { accessToken, user, userVerifiedAt } = get();
+
         // Restore auth header from persisted token on every page load
-        const { accessToken } = get();
         if (accessToken) {
           setAuthHeader(accessToken);
-          set({ loading: false });
-        } else {
-          set({ loading: true });
         }
+
+        // ── Fast path: skip the /api/auth/user network call if the cached user
+        // object is fresh enough. This eliminates a round-trip on every page load
+        // for users who just logged in or refreshed recently.
+        const isUserFresh =
+          user &&
+          accessToken &&
+          userVerifiedAt &&
+          Date.now() - userVerifiedAt < USER_TTL_MS;
+
+        if (isUserFresh) {
+          set({ loading: false });
+          return;
+        }
+
+        if (!accessToken) {
+          set({ loading: false });
+          return;
+        }
+
+        set({ loading: true });
 
         try {
           const res = await axios.get('/api/auth/user');
-          set({ user: res.data, loading: false });
+          set({ user: res.data, loading: false, userVerifiedAt: Date.now() });
         } catch (err) {
-          if (err.response?.status === 401 || err.response?.status === 403 || err.response?.status === 404) {
+          if (
+            err.response?.status === 401 ||
+            err.response?.status === 403 ||
+            err.response?.status === 404
+          ) {
             // Token invalid/expired — try to refresh
             const { refreshToken, _refresh } = get();
             if (refreshToken) {
               const refreshed = await _refresh();
               if (!refreshed) {
                 setAuthHeader(null);
-                set({ user: null, accessToken: null, refreshToken: null, loading: false });
+                set({ user: null, accessToken: null, refreshToken: null, loading: false, userVerifiedAt: null });
               }
             } else {
               setAuthHeader(null);
-              set({ user: null, accessToken: null, refreshToken: null, loading: false });
+              set({ user: null, accessToken: null, refreshToken: null, loading: false, userVerifiedAt: null });
             }
           } else {
             set({ loading: false });
@@ -66,7 +94,7 @@ const useAuthStore = create(
           set({ accessToken: newAccess, refreshToken: newRefresh });
           // Re-fetch user
           const userRes = await axios.get('/api/auth/user');
-          set({ user: userRes.data, loading: false });
+          set({ user: userRes.data, loading: false, userVerifiedAt: Date.now() });
           return true;
         } catch {
           return false;
@@ -77,7 +105,7 @@ const useAuthStore = create(
         const res = await axios.post('/api/auth/login', { email, password });
         const { accessToken, refreshToken, user } = res.data;
         setAuthHeader(accessToken);
-        set({ user, accessToken, refreshToken });
+        set({ user, accessToken, refreshToken, userVerifiedAt: Date.now() });
         return res;
       },
 
@@ -85,7 +113,7 @@ const useAuthStore = create(
         const res = await axios.post('/api/auth/register', { username, email, password, ref });
         const { accessToken, refreshToken, user } = res.data;
         setAuthHeader(accessToken);
-        set({ user, accessToken, refreshToken });
+        set({ user, accessToken, refreshToken, userVerifiedAt: Date.now() });
         return res;
       },
 
@@ -103,7 +131,7 @@ const useAuthStore = create(
 
           // Refresh user data from backend to sync balance
           const userRes = await axios.get('/api/auth/user');
-          set({ user: userRes.data });
+          set({ user: userRes.data, userVerifiedAt: Date.now() });
         } catch (err) {
           console.error('Backend investment logging failed:', err.message);
           throw err;
@@ -148,6 +176,7 @@ const useAuthStore = create(
             activeInvestments: state.activeInvestments.map((inv) =>
               inv.id === investmentId ? { ...inv, profitAdded: true } : inv
             ),
+            userVerifiedAt: Date.now(),
           }));
         } catch (err) {
           console.error('Failed to claim profit in database:', err.message);
@@ -168,7 +197,7 @@ const useAuthStore = create(
           console.warn('Backend logout failed:', err.message);
         }
         setAuthHeader(null);
-        set({ user: null, accessToken: null, refreshToken: null, activeInvestments: [] });
+        set({ user: null, accessToken: null, refreshToken: null, activeInvestments: [], userVerifiedAt: null });
       },
     }),
     {
@@ -178,6 +207,7 @@ const useAuthStore = create(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         activeInvestments: state.activeInvestments,
+        userVerifiedAt: state.userVerifiedAt,
       }),
     }
   )

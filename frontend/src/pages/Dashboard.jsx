@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import useAuthStore from '../store/authStore';
+import useDashboardStore from '../store/dashboardStore';
 import { 
   LayoutDashboard, CheckSquare, Bell, User, LogOut, 
   MessageSquare, Clock, CheckCircle2, 
@@ -11,7 +12,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { io } from 'socket.io-client';
-import { mockChartData, mockNotifications, mockReferralStats, mockTasks } from '../data/mockData';
+import { mockNotifications, mockTasks } from '../data/mockData';
 import DepositModal from '../components/DepositModal';
 import WithdrawModal from '../components/WithdrawModal';
 
@@ -27,79 +28,41 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [referralData, setReferralData] = useState(mockReferralStats);
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [countdowns, setCountdowns] = useState({});
-  
+
   const [tasks, setTasks] = useState(mockTasks);
   const [notifications, setNotifications] = useState(mockNotifications);
 
-  // Chart data state & dynamic loader
-  const [chartData, setChartData] = useState(mockChartData);
+  // ── Cached dashboard store data ──────────────────────────────────────────
+  const referralData = useDashboardStore((s) => s.referralData);
+  const chartData = useDashboardStore((s) => s.chartData);
+  const fetchReferralStats = useDashboardStore((s) => s.fetchReferralStats);
+  const fetchChartData = useDashboardStore((s) => s.fetchChartData);
 
+  // Fetch chart data once when user is available (cached after first load)
   useEffect(() => {
     if (user && user.id) {
-      axios.get('/api/referrals/stats')
-        .then(res => {
-          const txs = res.data.transactions;
-          if (txs && txs.length > 0) {
-            const sorted = [...txs].sort((a, b) => {
-              const aTime = a.date ? new Date(a.date).getTime() : 0;
-              const bTime = b.date ? new Date(b.date).getTime() : 0;
-              return aTime - bTime;
-            });
-            let runningBalance = parseFloat(user.balance || 0);
-            const totalDiff = txs.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-            let startBalance = runningBalance - totalDiff;
-
-            const data = sorted.map(t => {
-              startBalance += parseFloat(t.amount || 0);
-              const dateObj = t.date ? new Date(t.date) : null;
-              const name = dateObj && !isNaN(dateObj.getTime())
-                ? dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })
-                : 'Date';
-              return {
-                name,
-                value: parseFloat(startBalance.toFixed(2))
-              };
-            });
-            setChartData(data);
-          } else {
-            setChartData(mockChartData);
-          }
-        })
-        .catch(() => setChartData(mockChartData));
+      fetchChartData(user.balance);
     }
-  }, [user]);
+  }, [user?.id]);
 
   // Support Chat states & socket binding
   const [socket, setSocket] = useState(null);
-  const [chatMessages, setChatMessages] = useState([
-    { senderId: 'support', senderName: 'Support Agent', text: 'Welcome to the support desk! How can I help you today?', createdAt: new Date().toISOString() }
-  ]);
   const [chatInput, setChatInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Load chat messages from the database
+  // ── Cached chat store data ───────────────────────────────────────────────
+  const chatMessages = useDashboardStore((s) => s.chatMessages);
+  const fetchChatHistory = useDashboardStore((s) => s.fetchChatHistory);
+  const appendChatMessage = useDashboardStore((s) => s.appendChatMessage);
+
+  // Load chat messages from the store (cached — only fetches once per session)
   useEffect(() => {
     if (activeTab === 'chat') {
-      axios.get('/api/chat/history')
-        .then(res => {
-          if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-            setChatMessages(res.data);
-          } else {
-            setChatMessages([
-              { senderId: 'support', senderName: 'Support Agent', text: 'Welcome to the support desk! How can I help you today?', createdAt: new Date().toISOString() }
-            ]);
-          }
-        })
-        .catch(() => {
-          setChatMessages([
-            { senderId: 'support', senderName: 'Support Agent', text: 'Welcome to the support desk! How can I help you today?', createdAt: new Date().toISOString() }
-          ]);
-        });
+      fetchChatHistory();
     }
   }, [activeTab]);
 
@@ -112,12 +75,9 @@ const Dashboard = () => {
 
       newSocket.emit('joinChat', user.id);
 
+      // Store incoming messages in the Zustand cache (deduplication handled inside store)
       newSocket.on('receiveChatMessage', (message) => {
-        setChatMessages((prev) => {
-          // Prevent duplicates in state
-          if (prev.some(m => m.id === message.id)) return prev;
-          return [...prev, message];
-        });
+        appendChatMessage(message);
       });
 
       return () => {
@@ -133,7 +93,7 @@ const Dashboard = () => {
       await axios.post('/api/chat/send', {
         receiverId: 1, // Admin is 1
         text,
-        image: imageUrl
+        image: imageUrl,
       });
       setChatInput('');
     } catch (err) {
@@ -207,11 +167,10 @@ const Dashboard = () => {
     setActiveTab(searchParams.get('tab') || 'dashboard');
   }, [searchParams]);
 
+  // Fetch referral stats when tab opens (cached — skips if data is fresh)
   useEffect(() => {
     if (activeTab === 'referrals') {
-      axios.get('/api/referrals/stats')
-        .then(res => setReferralData(res.data))
-        .catch(() => setReferralData(mockReferralStats));
+      fetchReferralStats();
     }
   }, [activeTab]);
 
