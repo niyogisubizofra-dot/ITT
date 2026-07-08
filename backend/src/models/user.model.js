@@ -6,8 +6,8 @@ module.exports = (sequelize) => sequelize.define('User', {
   email: { type: DataTypes.STRING(100), allowNull: false, unique: true, validate: { isEmail: true } },
   password: { type: DataTypes.STRING, allowNull: false },
   role: {
-    type: DataTypes.ENUM('CEO', 'Chairman', 'Admin', 'Manager', 'Employee', 'Client', 'User'),
-    defaultValue: 'User',
+    type: DataTypes.ENUM('Admin', 'Client'),
+    defaultValue: 'Client',
   },
   balance: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0.00 },
   status: { type: DataTypes.ENUM('active', 'suspended', 'pending'), defaultValue: 'active' },

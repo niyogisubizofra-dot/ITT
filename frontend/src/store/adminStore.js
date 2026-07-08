@@ -10,16 +10,6 @@ const mockAdminStats = {
   activeInvestments: 0,
 };
 
-const mockRevenueChart = [
-  { name: 'Mon', deposits: 4200, withdrawals: 2100 },
-  { name: 'Tue', deposits: 5800, withdrawals: 3000 },
-  { name: 'Wed', deposits: 3900, withdrawals: 2600 },
-  { name: 'Thu', deposits: 7200, withdrawals: 4100 },
-  { name: 'Fri', deposits: 6100, withdrawals: 3300 },
-  { name: 'Sat', deposits: 4700, withdrawals: 2000 },
-  { name: 'Sun', deposits: 8300, withdrawals: 5200 },
-];
-
 const mockUsers = [];
 const mockPendingTransactions = [];
 const mockInvestments = [];
@@ -67,7 +57,7 @@ const useAdminStore = create((set, get) => ({
     set((state) => ({ stats: { ...state.stats, ...patch } })),
 
   // ── Revenue chart ──────────────────────────────────────────────────────────
-  revenueChart: mockRevenueChart,
+  revenueChart: [],
   chartFetchedAt: null,
   chartLoading: false,
 
@@ -78,7 +68,7 @@ const useAdminStore = create((set, get) => ({
     try {
       const res = await axios.get('/api/admin/revenue-chart');
       set({
-        revenueChart: res.data?.chart?.length ? res.data.chart : mockRevenueChart,
+        revenueChart: res.data?.chart?.length ? res.data.chart : [],
         chartFetchedAt: Date.now(),
         chartLoading: false,
       });
@@ -114,6 +104,11 @@ const useAdminStore = create((set, get) => ({
   patchUserStatus: (id, status) =>
     set((state) => ({
       users: state.users.map((u) => (u.id === id ? { ...u, status } : u)),
+    })),
+
+  deleteUser: (id) =>
+    set((state) => ({
+      users: state.users.filter((u) => u.id !== id),
     })),
 
   // ── Pending Transactions ───────────────────────────────────────────────────
@@ -185,87 +180,160 @@ const useAdminStore = create((set, get) => ({
   prependBroadcast: (broadcast) =>
     set((state) => ({ broadcasts: [broadcast, ...state.broadcasts] })),
 
-  // ── Chat conversations ─────────────────────────────────────────────────────
-  conversations: [
-    { userId: 1, username: 'j.miller', lastMessage: 'Is my withdrawal processed yet?', unread: 2, time: '10:24 AM' },
-    { userId: 2, username: 'sara_k', lastMessage: 'Thanks for the quick help!', unread: 0, time: 'Yesterday' },
-    { userId: 5, username: 'chris_trades', lastMessage: 'Can I upgrade my plan?', unread: 1, time: 'Yesterday' },
-  ],
+  // ── Chat & Ticket Management ───────────────────────────────────────────────
+  conversations: [],
   conversationsFetchedAt: null,
+  admins: [],
+  activeConversation: null,
+  chatMessages: [],
+  chatLoading: false,
+  conversationFilters: {
+    search: '',
+    status: 'all',
+    assignedAdminId: 'all',
+    isArchived: false,
+  },
+
+  setConversationFilters: (filters) => {
+    set((state) => ({
+      conversationFilters: { ...state.conversationFilters, ...filters }
+    }));
+    get().fetchConversations(true);
+  },
 
   fetchConversations: async (force = false) => {
-    // Conversations refresh every 30s or on force
-    const CONV_TTL = 30 * 1000;
-    if (!force && isFresh(get().conversationsFetchedAt, CONV_TTL)) return;
+    const filters = get().conversationFilters;
     try {
-      const res = await axios.get('/api/admin/conversations');
-      if (res.data?.length) {
-        set({ conversations: res.data, conversationsFetchedAt: Date.now() });
-      }
-    } catch {
-      // keep existing list
+      const res = await axios.get('/api/admin/conversations', {
+        params: {
+          search: filters.search || undefined,
+          status: filters.status || undefined,
+          assignedAdminId: filters.assignedAdminId === 'all' ? undefined : filters.assignedAdminId,
+          isArchived: filters.isArchived,
+        }
+      });
+      set({ conversations: res.data || [], conversationsFetchedAt: Date.now() });
+    } catch (err) {
+      console.error('Failed to fetch conversations', err);
     }
   },
 
-  upsertConversation: (message, currentUserId) =>
-    set((state) => {
-      const fromUser =
-        message.senderId === currentUserId ? message.receiverId : message.senderId;
-      const existing = state.conversations.find((c) => c.userId === fromUser);
-      if (existing) {
-        return {
-          conversations: state.conversations.map((c) =>
-            c.userId === fromUser
-              ? {
-                  ...c,
-                  lastMessage: message.text || 'Attachment',
-                  unread: (c.unread || 0) + 1,
-                  time: 'Now',
-                }
-              : c
-          ),
-        };
-      }
-      const newConv = {
-        userId: fromUser,
-        username: message.senderName || `User ${fromUser}`,
-        lastMessage: message.text || 'Attachment',
-        unread: 1,
-        time: 'Now',
-      };
-      return { conversations: [newConv, ...state.conversations] };
-    }),
+  fetchAdmins: async () => {
+    try {
+      const res = await axios.get('/api/admin/admins');
+      set({ admins: res.data || [] });
+    } catch (err) {
+      console.error('Failed to fetch admins list', err);
+    }
+  },
 
-  markConversationRead: (userId) =>
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.userId === userId ? { ...c, unread: 0 } : c
-      ),
-    })),
+  updateTicketStatus: async (conversationId, status) => {
+    try {
+      await axios.patch(`/api/admin/conversations/${conversationId}/status`, { status });
+      set((state) => {
+        const updated = state.conversations.map((c) =>
+          c.id === conversationId ? { ...c, status } : c
+        );
+        const active = state.activeConversation?.id === conversationId
+          ? { ...state.activeConversation, status }
+          : state.activeConversation;
+        return { conversations: updated, activeConversation: active };
+      });
+    } catch (err) {
+      console.error('Failed to update ticket status', err);
+    }
+  },
 
-  // ── Chat messages (keyed per conversation userId) ──────────────────────────
-  // Shape: { [userId]: Message[] }
+  assignTicket: async (conversationId, assignedAdminId) => {
+    try {
+      const res = await axios.patch(`/api/admin/conversations/${conversationId}/assign`, { assignedAdminId });
+      const { assignedAdminName } = res.data;
+      set((state) => {
+        const updated = state.conversations.map((c) =>
+          c.id === conversationId ? { ...c, assignedAdminId, assignedAdminName } : c
+        );
+        const active = state.activeConversation?.id === conversationId
+          ? { ...state.activeConversation, assignedAdminId, assignedAdminName }
+          : state.activeConversation;
+        return { conversations: updated, activeConversation: active };
+      });
+    } catch (err) {
+      console.error('Failed to assign ticket', err);
+    }
+  },
+
+  archiveTicket: async (conversationId, isArchived) => {
+    try {
+      await axios.patch(`/api/admin/conversations/${conversationId}/archive`, { isArchived });
+      set((state) => {
+        const activeFilter = state.conversationFilters.isArchived;
+        const updated = state.conversations.map((c) =>
+          c.id === conversationId ? { ...c, isArchived } : c
+        ).filter(c => c.isArchived === activeFilter);
+
+        const active = state.activeConversation?.id === conversationId
+          ? { ...state.activeConversation, isArchived }
+          : state.activeConversation;
+        return { conversations: updated, activeConversation: active };
+      });
+    } catch (err) {
+      console.error('Failed to archive ticket', err);
+    }
+  },
+
+  selectConversation: (conv) => {
+    set({ activeConversation: conv });
+    if (conv) {
+      get().fetchConversationMessages(conv.id);
+      get().markConversationRead(conv.id);
+    } else {
+      set({ chatMessages: [] });
+    }
+  },
+
+  fetchConversationMessages: async (conversationId) => {
+    set({ chatLoading: true });
+    try {
+      const res = await axios.get(`/api/admin/conversations/${conversationId}/messages`);
+      set({ chatMessages: res.data || [], chatLoading: false });
+    } catch {
+      set({ chatLoading: false });
+    }
+  },
+
+  markConversationRead: async (conversationId) => {
+    try {
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === conversationId ? { ...c, unread: 0 } : c
+        )
+      }));
+    } catch (e) {}
+  },
+
+  // ── Legacy Compatibility for Admin Chat ──────────────────────────
   chatHistories: {},
   chatHistoryLoading: {},
 
   fetchChatHistory: async (userId, force = false) => {
-    const histories = get().chatHistories;
-    // Only re-fetch if forced or not yet loaded for this user
-    if (!force && histories[userId]) return;
     if (get().chatHistoryLoading[userId]) return;
-
     set((state) => ({
       chatHistoryLoading: { ...state.chatHistoryLoading, [userId]: true },
     }));
     try {
       const res = await axios.get(`/api/admin/chat/history/${userId}`);
+      const messages = res.data || [];
       set((state) => ({
         chatHistories: {
           ...state.chatHistories,
-          [userId]: res.data?.length ? res.data : [],
+          [userId]: messages,
         },
         chatHistoryLoading: { ...state.chatHistoryLoading, [userId]: false },
       }));
+      const active = get().activeConversation;
+      if (active && Number(active.userId) === Number(userId)) {
+        set({ chatMessages: messages });
+      }
     } catch {
       set((state) => ({
         chatHistoryLoading: { ...state.chatHistoryLoading, [userId]: false },
@@ -273,14 +341,58 @@ const useAdminStore = create((set, get) => ({
     }
   },
 
-  appendChatMessage: (userId, message) =>
+  appendAdminChatMessage: (userId, message) => {
     set((state) => {
       const prev = state.chatHistories[userId] || [];
       if (prev.some((m) => m.id === message.id)) return state;
+      const updatedMessages = [...prev, message];
+
+      const active = state.activeConversation;
+      let newChatMessages = state.chatMessages;
+      if (active && (Number(active.userId) === Number(userId) || Number(active.id) === Number(message.conversationId))) {
+        newChatMessages = state.chatMessages.some(m => m.id === message.id)
+          ? state.chatMessages
+          : [...state.chatMessages, message];
+      }
+
       return {
-        chatHistories: { ...state.chatHistories, [userId]: [...prev, message] },
+        chatHistories: { ...state.chatHistories, [userId]: updatedMessages },
+        chatMessages: newChatMessages,
       };
+    });
+  },
+
+  upsertConversation: (message, currentUserId) =>
+    set((state) => {
+      const fromUser = message.senderId === currentUserId ? message.receiverId : message.senderId;
+      const existing = state.conversations.find((c) => Number(c.userId) === Number(fromUser) || Number(c.id) === Number(message.conversationId));
+      
+      if (existing) {
+        return {
+          conversations: state.conversations.map((c) => {
+            const isMatch = Number(c.id) === Number(message.conversationId) || (!message.conversationId && Number(c.userId) === Number(fromUser));
+            return isMatch
+              ? {
+                  ...c,
+                  lastMessage: message.text || (message.fileUrl ? 'Attachment' : 'Image'),
+                  unread: state.activeConversation?.id === c.id ? 0 : (c.unread || 0) + 1,
+                  lastMessageAt: message.createdAt || new Date().toISOString(),
+                }
+              : c;
+          }),
+        };
+      }
+      
+      get().fetchConversations(true);
+      return state;
     }),
+
+  markConversationReadLegacy: (userId) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.userId === userId ? { ...c, unread: 0 } : c
+      ),
+    })),
 
   // ── Cache invalidation ─────────────────────────────────────────────────────
   invalidateStats: () => set({ statsFetchedAt: null }),

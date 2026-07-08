@@ -21,9 +21,20 @@ const start = async () => {
     await sequelize.authenticate();
     logger.info('✅ Neon PostgreSQL connection established.');
 
-    // In development: alter existing tables to match models (safe for rapid iteration).
-    // In production: skip alter — it scans the entire schema and can add 5-30 s to cold start.
-    // Use migrations for production schema changes.
+    // Migrate existing roles to Admin and Client before syncing to avoid Enum conflicts
+    try {
+      await sequelize.query(`
+        UPDATE users 
+        SET role = CASE 
+          WHEN role IN ('CEO', 'Chairman', 'Admin') THEN 'Admin'
+          ELSE 'Client'
+        END
+      `);
+      logger.info('✅ Migrated existing user roles to Admin/Client.');
+    } catch (e) {
+      // Table might not exist yet, ignore
+    }
+
     if (process.env.NODE_ENV !== 'production') {
       await sequelize.sync({ alter: true });
       logger.info('✅ Database synced (alter mode — dev only).');

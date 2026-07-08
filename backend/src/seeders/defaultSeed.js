@@ -5,7 +5,7 @@ const { generateReferralCode } = require('../utils/helpers');
 
 const seed = async () => {
   try {
-    // ── CEO account ──────────────────────────────────────────────────────────
+    // ── CEO admin account ────────────────────────────────────────────────────
     const ceoEmail = process.env.CEO_EMAIL || 'ceo@invest.com';
     const existing = await User.findOne({ where: { email: ceoEmail } });
 
@@ -15,14 +15,15 @@ const seed = async () => {
         username: process.env.CEO_USERNAME || 'CEO',
         email: ceoEmail,
         password: hashed,
-        role: 'CEO',
+        role: 'Admin',
         status: 'active',
         referralCode: generateReferralCode(),
         balance: 0,
       });
-      logger.info(`✅ CEO account seeded → ${ceoEmail}`);
+      logger.info(`✅ CEO admin account seeded → ${ceoEmail}`);
     } else {
-      logger.info('ℹ️  CEO account already exists, skipping seed.');
+      await existing.update({ role: 'Admin' });
+      logger.info('ℹ️  CEO account role synced to Admin.');
     }
 
     // ── Admin account ─────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ const seed = async () => {
         balance: 0,
       });
       logger.info(`✅ Admin account seeded → ${adminEmail}`);
+    } else {
+      await adminExists.update({ role: 'Admin' });
     }
 
     // ── Test Admin: ishimwe ───────────────────────────────────────────────────
@@ -58,7 +61,6 @@ const seed = async () => {
       });
       logger.info('✅ Test Admin seeded → ishimwe');
     } else {
-      // Ensure password and role are correct on every restart
       const hashed = await bcrypt.hash('passd123', 12);
       await ishimweExists.update({ password: hashed, role: 'Admin', status: 'active' });
       logger.info('ℹ️  ishimwe account updated (role=Admin, password synced).');
@@ -72,7 +74,7 @@ const seed = async () => {
         username: 'jeremie',
         email: 'jeremie@invest.com',
         password: hashed,
-        role: 'User',
+        role: 'Client',
         status: 'active',
         referralCode: generateReferralCode(),
         balance: 500,
@@ -80,8 +82,8 @@ const seed = async () => {
       logger.info('✅ Test Client seeded → jeremie');
     } else {
       const hashed = await bcrypt.hash('passd123', 12);
-      await jeremieExists.update({ password: hashed, role: 'User', status: 'active' });
-      logger.info('ℹ️  jeremie account updated (role=User, password synced).');
+      await jeremieExists.update({ password: hashed, role: 'Client', status: 'active' });
+      logger.info('ℹ️  jeremie account updated (role=Client, password synced).');
     }
 
   } catch (err) {

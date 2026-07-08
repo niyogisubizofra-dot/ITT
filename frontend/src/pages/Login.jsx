@@ -26,7 +26,7 @@ const Login = () => {
     try {
       const res = await login(formData.email, formData.password);
       const role = res.data.user.role;
-      if (role === 'CEO' || role === 'Chairman' || role === 'Admin') {
+      if (role === 'Admin') {
         navigate('/admin-dashboard');
       } else {
         navigate('/dashboard');
@@ -41,16 +41,22 @@ const Login = () => {
         data?.msg ||
         data?.message ||
         data?.error?.message;
+      
+      const containsSystemError = dataMsg && /getaddrinfo|enotfound|econnrefused|dial|connect|database|sequelize|sql/i.test(dataMsg);
+      const displayMsg = containsSystemError 
+        ? 'Database connection issue. Please verify database availability or try again later.' 
+        : dataMsg;
+
       let errMsg = '';
 
       if (status === 500) {
-        errMsg = `Server Error (500): ${dataMsg || 'Internal Server Error. Please verify your backend server is running and database connection is active.'}`;
+        errMsg = `Server Error (500): ${displayMsg || 'Internal Server Error. Please verify your backend server is running and database connection is active.'}`;
       } else if (status === 400 || status === 401 || status === 403 || status === 404) {
-        errMsg = `Login Failed: ${dataMsg || 'Invalid credentials or request error.'}`;
+        errMsg = `Login Failed: ${displayMsg || 'Invalid credentials or request error.'}`;
       } else if (err.message === 'Network Error' || !err.response) {
-        errMsg = `Connection Failed: Please verify the backend server is running or VITE_API_URL is set correctly (${backendUrl}). Details: ${err.message}`;
+        errMsg = `Connection Failed: Please verify the backend server is running or VITE_API_URL is set correctly (${backendUrl}).`;
       } else {
-        errMsg = `Error: ${dataMsg || err.message || 'An unexpected error occurred.'}`;
+        errMsg = `Error: ${displayMsg || 'An unexpected error occurred.'}`;
       }
       setError(errMsg);
     } finally {

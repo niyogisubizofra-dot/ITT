@@ -11,4 +11,12 @@ module.exports = (sequelize) => sequelize.define('Investment', {
   startDate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   endDate: { type: DataTypes.DATE, allowNull: true },
   lastProfitAt: { type: DataTypes.DATE, allowNull: true },
-}, { tableName: 'investments', timestamps: true });
+}, { 
+  tableName: 'investments', 
+  timestamps: true,
+  indexes: [
+    { fields: ['userId'] },
+    { fields: ['status'] },
+    { fields: ['createdAt'] },
+  ]
+});

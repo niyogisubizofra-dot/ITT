@@ -15,8 +15,17 @@ const errorHandler = (err, req, res, next) => {
   }
 
   const status = err.status || err.statusCode || 500;
+  let clientMessage = err.message || 'Internal Server Error';
+  
+  if (
+    err.name?.startsWith('SequelizeConnection') || 
+    /getaddrinfo|enotfound|econnrefused|dial|connect|database/i.test(err.message || '')
+  ) {
+    clientMessage = 'Database connection error. Please try again later.';
+  }
+
   res.status(status).json({
-    error: err.message || 'Internal Server Error',
+    error: clientMessage,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };

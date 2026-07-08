@@ -34,8 +34,8 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-// CEO/Admin only shorthand
-const adminOnly = authorize('CEO', 'Chairman', 'Admin');
-const managerUp = authorize('CEO', 'Chairman', 'Admin', 'Manager');
+// Admin only shorthand
+const adminOnly = authorize('Admin');
+const managerUp = authorize('Admin');
 
 module.exports = { authenticate, authorize, adminOnly, managerUp };

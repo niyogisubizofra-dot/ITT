@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 import axios from 'axios';
-import { mockChartData, mockReferralStats } from '../data/mockData';
-
 // ── TTL helpers ──────────────────────────────────────────────────────────────
 const TTL = {
   referral: 5 * 60 * 1000,  // 5 min
@@ -15,7 +13,13 @@ const isFresh = (fetchedAt, ttl) =>
 const useDashboardStore = create((set, get) => ({
 
   // ── Referral data ──────────────────────────────────────────────────────────
-  referralData: mockReferralStats,
+  referralData: {
+    referralCode: '',
+    totalReferrals: 0,
+    levels: { 1: 0, 2: 0, 3: 0 },
+    earnings: { registrationBonuses: 0, total: 0, level1: 0, level2: 0, level3: 0 },
+    transactions: [],
+  },
   referralFetchedAt: null,
   referralLoading: false,
 
@@ -36,7 +40,7 @@ const useDashboardStore = create((set, get) => ({
   },
 
   // ── Chart data ─────────────────────────────────────────────────────────────
-  chartData: mockChartData,
+  chartData: [],
   chartFetchedAt: null,
   chartLoading: false,
 
@@ -69,53 +73,123 @@ const useDashboardStore = create((set, get) => ({
 
         set({ chartData: data, chartFetchedAt: Date.now(), chartLoading: false });
       } else {
-        set({ chartData: mockChartData, chartFetchedAt: Date.now(), chartLoading: false });
+        set({ chartData: [{ name: 'Today', value: parseFloat(balance || 0) }], chartFetchedAt: Date.now(), chartLoading: false });
       }
     } catch {
-      set({ chartData: mockChartData, chartFetchedAt: Date.now(), chartLoading: false });
+      set({ chartData: [{ name: 'Today', value: parseFloat(balance || 0) }], chartFetchedAt: Date.now(), chartLoading: false });
     }
   },
 
-  // ── Chat messages ──────────────────────────────────────────────────────────
-  chatMessages: [
-    {
-      senderId: 'support',
-      senderName: 'Support Agent',
-      text: 'Welcome to the support desk! How can I help you today?',
-      createdAt: new Date().toISOString(),
-    },
-  ],
+  // ── Support Chat ──────────────────────────────────────────────────────────
+  userConversations: [],
+  activeConversationId: null,
+  chatMessages: [],
   chatLoading: false,
 
+  fetchUserConversations: async () => {
+    try {
+      const res = await axios.get('/api/chat/conversations');
+      set({ userConversations: res.data || [] });
+      
+      const activeId = get().activeConversationId;
+      if (!activeId && res.data?.length > 0) {
+        set({ activeConversationId: res.data[0].id });
+      }
+    } catch (err) {
+      console.error('Failed to fetch user conversations', err);
+    }
+  },
+
+  createUserConversation: async (subject) => {
+    try {
+      const res = await axios.post('/api/chat/conversations', { subject });
+      set((state) => ({
+        userConversations: [res.data, ...state.userConversations],
+        activeConversationId: res.data.id,
+        chatMessages: [],
+      }));
+      return res.data;
+    } catch (err) {
+      console.error('Failed to create support conversation', err);
+      throw err;
+    }
+  },
+
   fetchChatHistory: async () => {
+    let activeId = get().activeConversationId;
+    if (!activeId) {
+      await get().fetchUserConversations();
+      activeId = get().activeConversationId;
+    }
+    
+    if (!activeId) {
+      set({
+        chatMessages: [
+          {
+            senderId: 'support',
+            senderName: 'Support Agent',
+            text: 'Welcome to the support desk! How can I help you today?',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      });
+      return;
+    }
+
     if (get().chatLoading) return;
     set({ chatLoading: true });
     try {
-      const res = await axios.get('/api/chat/history');
-      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        set({ chatMessages: res.data, chatLoading: false });
-      } else {
-        set({
-          chatMessages: [
-            {
-              senderId: 'support',
-              senderName: 'Support Agent',
-              text: 'Welcome to the support desk! How can I help you today?',
-              createdAt: new Date().toISOString(),
-            },
-          ],
-          chatLoading: false,
-        });
-      }
+      const res = await axios.get(`/api/chat/conversations/${activeId}/messages`);
+      set({ chatMessages: res.data || [], chatLoading: false });
     } catch {
       set({ chatLoading: false });
     }
   },
 
+  fetchConversationMessages: async (conversationId) => {
+    set({ activeConversationId: conversationId, chatLoading: true });
+    try {
+      const res = await axios.get(`/api/chat/conversations/${conversationId}/messages`);
+      set({ chatMessages: res.data || [], chatLoading: false });
+    } catch {
+      set({ chatLoading: false });
+    }
+  },
+
+  markConversationRead: async (conversationId) => {
+    try {
+      await axios.post(`/api/chat/conversations/${conversationId}/read`);
+    } catch (err) {
+      console.error('Failed to mark conversation read', err);
+    }
+  },
+
   appendChatMessage: (message) => {
     set((state) => {
-      if (state.chatMessages.some((m) => m.id === message.id)) return state;
-      return { chatMessages: [...state.chatMessages, message] };
+      const isDuplicate = state.chatMessages.some((m) => m.id === message.id);
+      const isForActiveChat = !message.conversationId || Number(state.activeConversationId) === Number(message.conversationId);
+      
+      const updatedMessages = isDuplicate
+        ? state.chatMessages
+        : isForActiveChat
+          ? [...state.chatMessages, message]
+          : state.chatMessages;
+
+      const updatedConvs = state.userConversations.map((c) => {
+        if (Number(c.id) === Number(message.conversationId)) {
+          return {
+            ...c,
+            lastMessage: message.text || (message.fileUrl ? 'Attachment' : 'Image'),
+            lastMessageAt: message.createdAt,
+          };
+        }
+        return c;
+      });
+
+      return {
+        chatMessages: updatedMessages,
+        userConversations: updatedConvs,
+      };
     });
   },
 

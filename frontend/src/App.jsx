@@ -40,7 +40,7 @@ const ScrollToTop = () => {
 };
 
 const isAdminUser = (user) => {
-  return user.role === 'CEO' || user.role === 'Chairman' || user.role === 'Admin';
+  return user.role === 'Admin';
 };
 
 const ProtectedRoute = ({ children }) => {
@@ -72,7 +72,7 @@ const ManagerProtectedRoute = ({ children }) => {
   const loading = useAuthStore((state) => state.loading);
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-text">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
-  const allowed = ['Manager', 'CEO', 'Chairman', 'HR Manager', 'Operations Manager'];
+  const allowed = ['Admin'];
   if (!allowed.includes(user.role)) return <Navigate to="/dashboard" />;
   return children;
 };

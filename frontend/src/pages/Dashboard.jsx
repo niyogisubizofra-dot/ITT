@@ -12,7 +12,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { io } from 'socket.io-client';
-import { mockNotifications, mockTasks } from '../data/mockData';
 import DepositModal from '../components/DepositModal';
 import WithdrawModal from '../components/WithdrawModal';
 
@@ -33,14 +32,47 @@ const Dashboard = () => {
   const [countdowns, setCountdowns] = useState({});
 
   const [tasks, setTasks] = useState([]);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+
+  const fetchNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      const res = await axios.get('/api/notifications');
+      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      setNotifications(list);
+    } catch (err) {
+      console.error('Failed to fetch user notifications', err);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const handleMarkRead = async (id) => {
+    try {
+      await axios.patch(`/api/notifications/${id}/read`);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    } catch (err) {
+      console.error('Failed to mark read', err);
+    }
+  };
+
+  const handleDeleteNotification = async (id) => {
+    try {
+      await axios.delete(`/api/notifications/${id}`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (err) {
+      console.error('Failed to delete notification', err);
+    }
+  };
 
   useEffect(() => {
     if (user?.id) {
       axios.get('/api/tasks/my-tasks')
         .then(res => setTasks(res.data))
         .catch(err => console.error('Failed to fetch user tasks', err));
+      fetchNotifications();
     }
   }, [user?.id]);
 
@@ -56,10 +88,14 @@ const Dashboard = () => {
           console.error('Failed to fetch tasks', err);
           setTasksLoading(false);
         });
+    } else if (activeTab === 'notifications') {
+      fetchNotifications();
     }
   }, [activeTab]);
 
+  const [completingTaskId, setCompletingTaskId] = useState(null);
   const handleCompleteTask = async (taskId) => {
+    setCompletingTaskId(taskId);
     try {
       const res = await axios.put(`/api/tasks/my-tasks/${taskId}/complete`);
       setTasks(prev =>
@@ -67,6 +103,8 @@ const Dashboard = () => {
       );
     } catch (err) {
       alert('Failed to complete task.');
+    } finally {
+      setCompletingTaskId(null);
     }
   };
 
@@ -87,52 +125,90 @@ const Dashboard = () => {
   const [socket, setSocket] = useState(null);
   const [chatInput, setChatInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [newTicketSubject, setNewTicketSubject] = useState('');
+  const [showNewTicketModal, setShowNewTicketModal] = useState(false);
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [searchMessageQuery, setSearchMessageQuery] = useState('');
   const fileInputRef = useRef(null);
 
   // ── Cached chat store data ───────────────────────────────────────────────
   const chatMessages = useDashboardStore((s) => s.chatMessages);
-  const fetchChatHistory = useDashboardStore((s) => s.fetchChatHistory);
+  const userConversations = useDashboardStore((s) => s.userConversations);
+  const activeConversationId = useDashboardStore((s) => s.activeConversationId);
+  const fetchUserConversations = useDashboardStore((s) => s.fetchUserConversations);
+  const createUserConversation = useDashboardStore((s) => s.createUserConversation);
+  const fetchConversationMessages = useDashboardStore((s) => s.fetchConversationMessages);
+  const markConversationRead = useDashboardStore((s) => s.markConversationRead);
   const appendChatMessage = useDashboardStore((s) => s.appendChatMessage);
 
-  // Load chat messages from the store (cached — only fetches once per session)
+  // Fetch conversations list when chat tab opens
   useEffect(() => {
     if (activeTab === 'chat') {
-      fetchChatHistory();
+      fetchUserConversations();
     }
   }, [activeTab]);
+
+  // Load chat messages when active conversation changes
+  useEffect(() => {
+    if (activeTab === 'chat' && activeConversationId) {
+      fetchConversationMessages(activeConversationId);
+      markConversationRead(activeConversationId);
+    }
+  }, [activeTab, activeConversationId]);
 
   useEffect(() => {
     if (activeTab === 'chat' && user) {
       const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
-      
       const newSocket = io(socketUrl, { withCredentials: true });
       setSocket(newSocket);
 
       newSocket.emit('joinChat', user.id);
 
-      // Store incoming messages in the Zustand cache (deduplication handled inside store)
       newSocket.on('receiveChatMessage', (message) => {
         appendChatMessage(message);
+        if (Number(message.conversationId) === Number(activeConversationId)) {
+          markConversationRead(activeConversationId);
+        }
+      });
+
+      newSocket.on('ticketStatusChanged', ({ id, status }) => {
+        fetchUserConversations();
+        if (Number(id) === Number(activeConversationId)) {
+          fetchConversationMessages(activeConversationId);
+        }
+      });
+      
+      newSocket.on('ticketAssigned', ({ id, assignedAdminId, assignedAdminName }) => {
+        fetchUserConversations();
+        if (Number(id) === Number(activeConversationId)) {
+          fetchConversationMessages(activeConversationId);
+        }
       });
 
       return () => {
         newSocket.disconnect();
       };
     }
-  }, [activeTab, user]);
+  }, [activeTab, user, activeConversationId]);
 
-  const sendChatMessage = async (text = '', imageUrl = null) => {
-    if (!text.trim() && !imageUrl) return;
+  const sendChatMessage = async (text = '', imageUrl = null, fileUrl = null, fileName = null) => {
+    if ((!text.trim() && !imageUrl && !fileUrl) || isSendingMessage) return;
 
+    setIsSendingMessage(true);
     try {
       await axios.post('/api/chat/send', {
-        receiverId: 1, // Admin is 1
+        conversationId: activeConversationId,
         text,
         image: imageUrl,
+        fileUrl,
+        fileName,
       });
       setChatInput('');
     } catch (err) {
       alert('Failed to send message.');
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -143,16 +219,21 @@ const Dashboard = () => {
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('category', 'ChatAttachment');
+
+    const fileType = file.type;
+    const isImage = fileType.startsWith('image/');
 
     try {
-      const res = await axios.post('/api/documents/upload', formData, {
+      const res = await axios.post('/api/chat/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      // Send the uploaded image url via chat
-      sendChatMessage('', res.data.path);
+      if (isImage) {
+        sendChatMessage('', res.data.fileUrl);
+      } else {
+        sendChatMessage('', null, res.data.fileUrl, res.data.fileName);
+      }
     } catch (err) {
-      alert('Failed to upload image. Please try again.');
+      alert('Failed to upload file. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -587,10 +668,12 @@ const Dashboard = () => {
                                }`}>{isDone ? 'Completed' : t.status}</span>
                                {!isDone && (
                                  <button
+                                   disabled={completingTaskId === t.id}
                                    onClick={() => handleCompleteTask(t.id)}
-                                   className="btn-primary px-4 py-2 text-sm font-bold rounded-xl"
+                                   className="btn-primary px-4 py-2 text-sm font-bold rounded-xl flex items-center gap-1.5 disabled:opacity-50"
                                  >
-                                   Complete Task
+                                   {completingTaskId === t.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                   {completingTaskId === t.id ? 'Processing...' : 'Complete Task'}
                                  </button>
                                )}
                             </div>
@@ -608,112 +691,310 @@ const Dashboard = () => {
           {activeTab === 'notifications' && (
             <div className="fade-in max-w-3xl mx-auto space-y-6">
                <h2 className="text-3xl font-black text-slate-800 mb-8">Inbox & Updates</h2>
-               {notifications.map(n => (
-                 <div key={n.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start space-x-4 hover:shadow-md transition">
+               {notificationsLoading && (
+                 <div className="flex justify-center py-10">
+                   <Loader2 className="w-8 h-8 animate-spin text-brand-primary" />
+                 </div>
+               )}
+               {!notificationsLoading && notifications.map(n => (
+                 <div key={n.id} className={`bg-white p-6 rounded-2xl shadow-sm border flex items-start space-x-4 hover:shadow-md transition ${n.isRead ? 'border-slate-100 opacity-75' : 'border-brand-primary/30 shadow-sm'}`}>
                     <div className={`p-3 rounded-2xl ${
-                      n.type === 'broadcast' ? 'bg-blue-100 text-blue-600' : 
-                      n.type === 'news' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-600'
+                      n.type === 'error' ? 'bg-red-100 text-red-600' :
+                      n.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
+                      n.type === 'warning' ? 'bg-amber-100 text-amber-600' :
+                      'bg-slate-100 text-slate-600'
                     }`}>
                       <Bell className="w-6 h-6" />
                     </div>
                     <div className="flex-grow">
                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{n.type} notification</span>
-                          <span className="text-xs text-slate-400 font-medium">{n.time}</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{n.type || 'info'} notification</span>
+                          <span className="text-xs text-slate-400 font-medium">{new Date(n.createdAt).toLocaleString()}</span>
                        </div>
-                       <p className="text-slate-800 font-bold text-lg leading-snug">{n.msg}</p>
+                       <h4 className="font-bold text-slate-800 text-base">{n.title}</h4>
+                       <p className="text-slate-600 font-medium text-sm leading-snug mt-1">{n.message}</p>
                        <div className="mt-4 flex space-x-3">
-                          <button className="text-brand-primary text-sm font-black uppercase tracking-widest hover:underline">Mark as read</button>
-                          {n.type === 'broadcast' && <button className="text-slate-400 text-sm font-black uppercase tracking-widest hover:underline">View details</button>}
+                          {!n.isRead && (
+                            <button 
+                              onClick={() => handleMarkRead(n.id)}
+                              className="text-brand-primary text-sm font-black uppercase tracking-widest hover:underline"
+                            >
+                              Mark as read
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => handleDeleteNotification(n.id)}
+                            className="text-red-500 text-sm font-black uppercase tracking-widest hover:underline"
+                          >
+                            Delete
+                          </button>
                        </div>
                     </div>
                  </div>
                ))}
+               {!notificationsLoading && notifications.length === 0 && (
+                 <p className="text-center py-10 text-slate-400 font-bold">No notifications found.</p>
+               )}
             </div>
           )}
 
           {activeTab === 'chat' && (
-            <div className="fade-in h-[calc(100vh-140px)] md:h-[650px] bg-brand-secondary/40 border border-brand-border/30 rounded-3xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-col font-sans">
-               <div className="p-4 md:p-6 border-b border-brand-border/20 flex items-center justify-between bg-brand-secondary/60 backdrop-blur-sm">
-                  <div className="flex items-center space-x-3">
-                     <div className="relative">
-                        <img src="https://ui-avatars.com/api/?name=Support&background=2563eb&color=fff" className="w-10 h-10 rounded-full shadow-md border border-brand-border/30" alt="Support avatar" />
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-brand-secondary"></div>
-                     </div>
-                     <div>
-                        <span className="font-bold text-brand-text block text-base leading-tight">Support Desk</span>
-                        <span className="text-emerald-400 text-[10px] font-black uppercase tracking-widest flex items-center mt-0.5">
-                           Active Now
-                        </span>
-                     </div>
+            <div className="fade-in h-[calc(100vh-140px)] md:h-[650px] bg-brand-secondary/40 border border-brand-border/30 rounded-3xl shadow-2xl backdrop-blur-md overflow-hidden flex flex-row font-sans">
+               {/* Left Panel: Conversations list */}
+               <div className="w-80 border-r border-brand-border/20 flex flex-col h-full bg-brand-dark/20 shrink-0">
+                  <div className="p-4 border-b border-brand-border/20 flex items-center justify-between shrink-0">
+                     <span className="font-bold text-brand-text text-sm">Support Tickets</span>
+                     <button 
+                        onClick={() => setShowNewTicketModal(true)} 
+                        className="bg-brand-primary text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-brand-primary/80 transition"
+                     >
+                        New Chat
+                     </button>
                   </div>
-                  {/* Rich Text controls */}
-                  <div className="flex items-center space-x-1 sm:space-x-2 bg-brand-dark/40 border border-brand-border/30 p-1 rounded-xl">
-                     <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Bold className="w-4 h-4" /></button>
-                     <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Italic className="w-4 h-4" /></button>
-                     <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Link2 className="w-4 h-4" /></button>
-                  </div>
-               </div>
-               
-               <div className="flex-grow p-4 sm:p-6 space-y-4 overflow-y-auto bg-brand-dark/10 flex flex-col scrollbar-thin">
-                  {chatMessages.map((msg, index) => {
-                     const isSelf = msg.senderId === user?.id;
-                     return (
-                        <div key={index} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
-                           {!isSelf && (
-                              <img src={`https://ui-avatars.com/api/?name=${msg.senderName}&background=2563eb&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-md border border-brand-border/30" alt="avatar" />
-                           )}
-                           <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-md border ${
-                              isSelf 
-                              ? 'bg-gradient-to-r from-brand-primary to-brand-accent text-white rounded-br-[4px] border-brand-primary/20' 
-                              : 'bg-brand-secondary text-brand-text border-brand-border/40 rounded-bl-[4px]'
-                           } max-w-[70%]`}>
-                              {msg.text && <p className="font-normal">{renderMessageText(msg.text)}</p>}
-                              {msg.image && (
-                                 <div className="mt-2 group relative overflow-hidden rounded-2xl border border-brand-border/30 bg-brand-dark/30 p-1.5 transition-all duration-300 hover:border-brand-primary/50">
-                                    <div className="absolute top-2 left-2 z-10 bg-brand-primary/95 text-white text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shadow-md">
-                                       <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                                       Market Analysis Chart
-                                    </div>
-                                    <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl">
-                                       <img 
-                                          src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} 
-                                          alt="Uploaded chart analysis" 
-                                          className="w-full max-w-[280px] sm:max-w-md object-cover transition-transform duration-500 group-hover:scale-105" 
-                                       />
-                                    </a>
-                                 </div>
-                              )}
-                              <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-brand-text/50'}`}>
-                                 {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div className="flex-grow overflow-y-auto p-2 space-y-2">
+                     {userConversations.map((conv) => {
+                        const isActive = conv.id === activeConversationId;
+                        return (
+                           <div 
+                              key={conv.id}
+                              onClick={() => {
+                                 useDashboardStore.setState({ activeConversationId: conv.id });
+                              }}
+                              className={`p-3 rounded-2xl cursor-pointer transition border text-left block w-full ${
+                                 isActive 
+                                    ? 'bg-brand-primary/25 border-brand-primary/40 text-brand-text' 
+                                    : 'hover:bg-brand-secondary/40 border-transparent text-brand-text/70'
+                              }`}
+                           >
+                              <div className="flex items-center justify-between mb-1">
+                                 <span className="font-bold truncate text-sm max-w-[120px]">{conv.subject}</span>
+                                 <span className={`text-[9px] font-black px-2 py-0.5 rounded-full leading-none shrink-0 ${
+                                    conv.status === 'Open' ? 'bg-blue-500/20 text-blue-400' :
+                                    conv.status === 'Pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                                    conv.status === 'Resolved' ? 'bg-green-500/20 text-green-400' :
+                                    'bg-slate-500/20 text-slate-400'
+                                 }`}>
+                                    {conv.status}
+                                 </span>
+                              </div>
+                              <p className="text-xs text-brand-text/50 truncate mb-1">
+                                 {conv.lastMessage || 'No messages yet'}
+                              </p>
+                              <span className="text-[9px] text-brand-text/40 block text-right">
+                                 {new Date(conv.lastMessageAt || conv.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                               </span>
                            </div>
+                        );
+                     })}
+                     {userConversations.length === 0 && (
+                        <div className="p-8 text-center text-brand-text/40 text-xs">
+                           No support conversations yet. Create one to ask for help!
                         </div>
-                     );
-                  })}
-               </div>
-
-               <div className="p-4 bg-brand-secondary/60 border-t border-brand-border/20">
-                  <div className="flex items-center space-x-2 bg-brand-dark/60 border border-brand-border/30 p-1.5 rounded-full shadow-inner">
-                     {/* Image upload button */}
-                     <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                     <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-brand-secondary/50 rounded-full transition text-brand-accent relative shrink-0">
-                        {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-brand-accent" /> : <Image className="w-5 h-5" />}
-                     </button>
-
-                     <input 
-                        type="text" 
-                        value={chatInput} 
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(chatInput); }}
-                        className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-brand-text placeholder-brand-text/40 font-medium" 
-                        placeholder="Type a message..." 
-                     />
-                     <button onClick={() => sendChatMessage(chatInput)} className="text-brand-accent hover:text-brand-primary p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
-                        <Send className="w-5 h-5 fill-current" />
-                     </button>
+                     )}
                   </div>
                </div>
+
+               {/* Right Panel: Chat message area */}
+               <div className="flex-grow flex flex-col h-full bg-brand-dark/10">
+                  {activeConversationId ? (
+                     <>
+                        {/* Header */}
+                        <div className="p-4 md:p-6 border-b border-brand-border/20 flex items-center justify-between bg-brand-secondary/60 backdrop-blur-sm shrink-0">
+                           <div className="flex items-center space-x-3">
+                              <div className="relative">
+                                 <img src="https://ui-avatars.com/api/?name=Support&background=2563eb&color=fff" className="w-10 h-10 rounded-full shadow-md border border-brand-border/30" alt="Support avatar" />
+                                 <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-brand-secondary"></div>
+                              </div>
+                              <div className="text-left">
+                                 <div className="flex items-center space-x-2">
+                                    <span className="font-bold text-brand-text block text-base leading-tight">
+                                       {userConversations.find(c => c.id === activeConversationId)?.subject || 'Support Chat'}
+                                    </span>
+                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                                       userConversations.find(c => c.id === activeConversationId)?.status === 'Open' ? 'bg-blue-500/20 text-blue-400' :
+                                       userConversations.find(c => c.id === activeConversationId)?.status === 'Pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                                       userConversations.find(c => c.id === activeConversationId)?.status === 'Resolved' ? 'bg-green-500/20 text-green-400' :
+                                       'bg-slate-500/20 text-slate-400'
+                                    }`}>
+                                       {userConversations.find(c => c.id === activeConversationId)?.status}
+                                    </span>
+                                 </div>
+                                 <span className="text-[10px] text-brand-text/50 font-medium">
+                                    {userConversations.find(c => c.id === activeConversationId)?.assignedAdminName 
+                                       ? `Agent: ${userConversations.find(c => c.id === activeConversationId)?.assignedAdminName}` 
+                                       : 'Waiting for Admin Assignment'}
+                                 </span>
+                              </div>
+                           </div>
+                           <div className="flex items-center space-x-2">
+                              <input 
+                                 type="text" 
+                                 placeholder="Search messages..."
+                                 value={searchMessageQuery}
+                                 onChange={(e) => setSearchMessageQuery(e.target.value)}
+                                 className="bg-brand-dark/40 border border-brand-border/30 rounded-xl px-3 py-1.5 text-xs text-brand-text focus:outline-none focus:border-brand-primary"
+                              />
+                              <div className="hidden sm:flex items-center space-x-1 bg-brand-dark/40 border border-brand-border/30 p-1 rounded-xl">
+                                 <button type="button" title="Bold text" onClick={() => insertRichText('bold')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Bold className="w-4 h-4" /></button>
+                                 <button type="button" title="Italic text" onClick={() => insertRichText('italic')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Italic className="w-4 h-4" /></button>
+                                 <button type="button" title="Add Link" onClick={() => insertRichText('link')} className="p-2 hover:bg-brand-secondary/50 rounded-lg text-brand-text/70 hover:text-brand-text transition"><Link2 className="w-4 h-4" /></button>
+                              </div>
+                           </div>
+                        </div>
+ 
+                        {/* Message History */}
+                        <div className="flex-grow p-4 sm:p-6 space-y-4 overflow-y-auto flex flex-col scrollbar-thin">
+                           {chatMessages
+                              .filter(m => !searchMessageQuery || m.text?.toLowerCase().includes(searchMessageQuery.toLowerCase()))
+                              .map((msg, index) => {
+                                 const isSelf = msg.senderId === user?.id;
+                                 return (
+                                    <div key={index} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
+                                       {!isSelf && (
+                                          <img src={`https://ui-avatars.com/api/?name=${msg.senderName || 'Admin'}&background=2563eb&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 shadow-md border border-brand-border/30" alt="avatar" />
+                                       )}
+                                       <div className={`relative px-4 py-2 sm:py-2.5 rounded-[18px] text-[15px] leading-tight font-sans shadow-md border text-left ${
+                                          isSelf 
+                                          ? 'bg-gradient-to-r from-brand-primary to-brand-accent text-white rounded-br-[4px] border-brand-primary/20' 
+                                          : 'bg-brand-secondary text-brand-text border-brand-border/40 rounded-bl-[4px]'
+                                       } max-w-[70%]`}>
+                                          {msg.text && <p className="font-normal">{renderMessageText(msg.text)}</p>}
+                                          {msg.image && (
+                                             <div className="mt-2 group relative overflow-hidden rounded-2xl border border-brand-border/30 bg-brand-dark/30 p-1.5 transition-all duration-300 hover:border-brand-primary/50">
+                                                <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl">
+                                                   <img 
+                                                      src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} 
+                                                      alt="Uploaded chart analysis" 
+                                                      className="w-full max-w-[280px] sm:max-w-md object-cover transition-transform duration-500 group-hover:scale-105" 
+                                                   />
+                                                </a>
+                                             </div>
+                                          )}
+                                          {msg.fileUrl && (
+                                             <div className="mt-2 flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/20 p-3 rounded-xl hover:border-brand-primary transition">
+                                                <Paperclip className="w-5 h-5 text-brand-accent flex-shrink-0" />
+                                                <div className="overflow-hidden flex-grow mr-4">
+                                                   <span className="text-xs font-bold text-brand-text block truncate">{msg.fileName || 'Attachment'}</span>
+                                                </div>
+                                                <a 
+                                                   href={msg.fileUrl.startsWith('http') ? msg.fileUrl : `/${msg.fileUrl}`} 
+                                                   download={msg.fileName}
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   className="text-xs font-black uppercase text-brand-accent hover:underline flex-shrink-0"
+                                                >
+                                                   Download
+                                                </a>
+                                             </div>
+                                          )}
+                                          <div className="flex items-center justify-end space-x-1 mt-1 text-[8px] tracking-tighter uppercase font-semibold">
+                                             <span className={isSelf ? 'text-white/70' : 'text-brand-text/50'}>
+                                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                             </span>
+                                             {isSelf && (
+                                                <span className="text-white/85 text-[8px]">
+                                                   {msg.isRead ? ' • Read' : ' • Sent'}
+                                                </span>
+                                             )}
+                                          </div>
+                                       </div>
+                                    </div>
+                                 );
+                              })}
+                        </div>
+ 
+                        {/* Input bar */}
+                        <div className="p-4 bg-brand-secondary/60 border-t border-brand-border/20 shrink-0">
+                           <div className="flex items-center space-x-2 bg-brand-dark/60 border border-brand-border/30 p-1.5 rounded-full shadow-inner">
+                              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                              <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-brand-secondary/50 rounded-full transition text-brand-accent relative shrink-0">
+                                 {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-brand-accent" /> : <Paperclip className="w-5 h-5" />}
+                              </button>
+ 
+                              <input 
+                                 type="text" 
+                                 value={chatInput} 
+                                 onChange={(e) => setChatInput(e.target.value)}
+                                 onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(chatInput); }}
+                                 className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-brand-text placeholder-brand-text/40 font-medium" 
+                                 placeholder="Type a message..." 
+                              />
+                              <button 
+                                 onClick={() => sendChatMessage(chatInput)} 
+                                 disabled={isSendingMessage}
+                                 className="text-brand-accent hover:text-brand-primary p-2.5 hover:scale-105 active:scale-95 transition shrink-0 disabled:opacity-50"
+                              >
+                                 {isSendingMessage ? <Loader2 className="w-5 h-5 animate-spin text-brand-accent" /> : <Send className="w-5 h-5 fill-current" />}
+                              </button>
+                           </div>
+                        </div>
+                     </>
+                  ) : (
+                     <div className="flex flex-col items-center justify-center flex-grow p-8 text-center text-brand-text/40 space-y-4">
+                        <MessageSquare className="w-16 h-16 text-brand-text/20" />
+                        <span className="text-lg font-bold text-brand-text/60">Select or Start a Conversation</span>
+                        <p className="text-sm max-w-md">
+                           Need assistance? Create a new support ticket conversation and an administrator will respond shortly.
+                        </p>
+                        <button 
+                           onClick={() => setShowNewTicketModal(true)} 
+                           className="bg-brand-primary text-white px-6 py-3 rounded-full font-black shadow-lg hover:bg-brand-primary/80 transition active:scale-95"
+                        >
+                           Create Support Ticket
+                        </button>
+                     </div>
+                  )}
+               </div>
+ 
+               {/* New Ticket Modal */}
+               {showNewTicketModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                     <div className="bg-brand-secondary border border-brand-border/30 rounded-3xl p-6 max-w-md w-full shadow-2xl relative text-left">
+                        <button 
+                           onClick={() => setShowNewTicketModal(false)}
+                           className="absolute top-4 right-4 text-brand-text/60 hover:text-brand-text transition"
+                        >
+                           <X className="w-6 h-6" />
+                        </button>
+                        <h3 className="text-xl font-black text-brand-text mb-4">Start Support Chat</h3>
+                        <div className="space-y-4">
+                           <div>
+                              <label className="text-xs font-bold text-brand-text/70 uppercase tracking-wider block mb-1">Subject / Question</label>
+                              <input 
+                                 type="text" 
+                                 placeholder="e.g. Deposit issue, Plan upgrade details..." 
+                                 value={newTicketSubject}
+                                 onChange={(e) => setNewTicketSubject(e.target.value)}
+                                 className="w-full bg-brand-dark/60 border border-brand-border/30 rounded-2xl px-4 py-3 text-brand-text placeholder-brand-text/30 focus:outline-none focus:border-brand-primary transition"
+                              />
+                           </div>
+                           <button
+                               disabled={isCreatingTicket}
+                               onClick={async () => {
+                                  if (!newTicketSubject.trim()) {
+                                     alert('Please enter a subject.');
+                                     return;
+                                  }
+                                  setIsCreatingTicket(true);
+                                  try {
+                                     await createUserConversation(newTicketSubject);
+                                     setNewTicketSubject('');
+                                     setShowNewTicketModal(false);
+                                  } catch (e) {
+                                     alert('Failed to create ticket.');
+                                  } finally {
+                                     setIsCreatingTicket(false);
+                                  }
+                               }}
+                               className="w-full bg-brand-primary text-white py-3 rounded-2xl font-black uppercase tracking-wider hover:bg-brand-primary/80 transition active:scale-95 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                               {isCreatingTicket && <Loader2 className="w-4 h-4 animate-spin" />}
+                               {isCreatingTicket ? 'Processing...' : 'Create Conversation'}
+                            </button>
+                        </div>
+                     </div>
+                  </div>
+               )}
             </div>
           )}
 

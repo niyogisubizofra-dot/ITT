@@ -5,8 +5,8 @@ import {
   LayoutDashboard, Users, Wallet, TrendingUp, DollarSign, CreditCard,
   Bell, MessageSquare, Zap, LogOut, Home, Menu, X, Search,
   CheckCircle2, XCircle, ArrowRight, ArrowUpRight, ArrowDownRight,
-  Send, Image, Loader2, Megaphone, ShieldCheck, Ban, Eye,
-  RefreshCw, UserPlus, CheckSquare, Clock
+  Send, Image, Loader2, Megaphone, ShieldCheck, Ban, Eye, Trash2,
+  RefreshCw, UserPlus, CheckSquare, Clock, Paperclip, Archive, UserCheck
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -45,11 +45,12 @@ const AdminDashboard = () => {
   const prependUser = useAdminStore((s) => s.prependUser);
   const patchStats = useAdminStore((s) => s.patchStats);
   const patchUserStatus = useAdminStore((s) => s.patchUserStatus);
+  const deleteUser = useAdminStore((s) => s.deleteUser);
   const removePendingTx = useAdminStore((s) => s.removePendingTx);
   const prependBroadcast = useAdminStore((s) => s.prependBroadcast);
   const upsertConversation = useAdminStore((s) => s.upsertConversation);
   const markConversationRead = useAdminStore((s) => s.markConversationRead);
-  const appendAdminChatMessage = useAdminStore((s) => s.appendChatMessage);
+  const appendAdminChatMessage = useAdminStore((s) => s.appendAdminChatMessage);
   const invalidateStats = useAdminStore((s) => s.invalidateStats);
 
   // ── Pie chart (static) ──────────────────────────────────────────────────────────────────────
@@ -115,6 +116,12 @@ const AdminDashboard = () => {
   // ── Users ─────────────────────────────────────────────────────────────────────────────────
   const [userSearch, setUserSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [userPage, setUserPage] = useState(1);
+  const [investmentsPage, setInvestmentsPage] = useState(1);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [userSearch, statusFilter]);
 
   useEffect(() => {
     if (activeTab === 'users' || activeTab === 'tasks') fetchUsers();
@@ -129,12 +136,39 @@ const AdminDashboard = () => {
     });
   }, [users, userSearch, statusFilter]);
 
-  const toggleUserStatus = (id) => {
+  const paginatedUsers = useMemo(() => {
+    return filteredUsers.slice((userPage - 1) * 10, userPage * 10);
+  }, [filteredUsers, userPage]);
+
+  const paginatedInvestments = useMemo(() => {
+    return investments.slice((investmentsPage - 1) * 10, investmentsPage * 10);
+  }, [investments, investmentsPage]);
+
+  const toggleUserStatus = async (id) => {
+    setSuspendingUserId(id);
     const target = users.find(u => u.id === id);
     const newStatus = target?.status === 'active' ? 'suspended' : 'active';
-    // Optimistic update in store
-    patchUserStatus(id, newStatus);
-    axios.post(`/api/admin/users/${id}/toggle-status`).catch(() => fetchUsers(true));
+    try {
+      await axios.post(`/api/admin/users/${id}/toggle-status`);
+      patchUserStatus(id, newStatus);
+    } catch (err) {
+      alert('Failed to update user status');
+    } finally {
+      setSuspendingUserId(null);
+    }
+  };
+
+  const handleDeleteUser = async (id) => {
+    if (!window.confirm('Are you sure you want to permanently delete this user account?')) return;
+    setDeletingUserId(id);
+    try {
+      await axios.delete(`/api/admin/users/${id}`);
+      deleteUser(id);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete user');
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   // ── Transactions ───────────────────────────────────────────────────────────────────────
@@ -142,10 +176,16 @@ const AdminDashboard = () => {
     if (activeTab === 'transactions') fetchPendingTx();
   }, [activeTab]);
 
-  const handleTxDecision = (id, decision) => {
-    // Optimistic removal from store
-    removePendingTx(id);
-    axios.post(`/api/admin/transactions/${id}/${decision}`).catch(() => {});
+  const handleTxDecision = async (id, decision) => {
+    setProcessingTxId(id);
+    try {
+      await axios.post(`/api/admin/transactions/${id}/${decision}`);
+      removePendingTx(id);
+    } catch (err) {
+      alert('Failed to process transaction');
+    } finally {
+      setProcessingTxId(null);
+    }
   };
 
   // ── Investments ──────────────────────────────────────────────────────────────────────
@@ -242,26 +282,36 @@ const AdminDashboard = () => {
   };
 
   // ── Chat (multi-conversation) ──────────────────────────────────────────────────────
-  const [activeConversation, setActiveConversation] = useState(null);
-  // Derive current chat messages from the per-userId cache in the store
-  const chatMessages = activeConversation
-    ? (chatHistories[activeConversation.userId] || [])
-    : [];
+  const admins = useAdminStore((s) => s.admins);
+  const activeConversation = useAdminStore((s) => s.activeConversation);
+  const chatMessages = useAdminStore((s) => s.chatMessages);
+  const chatLoading = useAdminStore((s) => s.chatLoading);
+  const conversationFilters = useAdminStore((s) => s.conversationFilters);
+  
+  const setConversationFilters = useAdminStore((s) => s.setConversationFilters);
+  const fetchAdmins = useAdminStore((s) => s.fetchAdmins);
+  const updateTicketStatus = useAdminStore((s) => s.updateTicketStatus);
+  const assignTicket = useAdminStore((s) => s.assignTicket);
+  const archiveTicket = useAdminStore((s) => s.archiveTicket);
+  const selectConversation = useAdminStore((s) => s.selectConversation);
+  const fetchConversationMessages = useAdminStore((s) => s.fetchConversationMessages);
+  
   const [chatInput, setChatInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [socket, setSocket] = useState(null);
+  const [searchMessageQuery, setSearchMessageQuery] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [processingTxId, setProcessingTxId] = useState(null);
+  const [suspendingUserId, setSuspendingUserId] = useState(null);
+  const [deletingUserId, setDeletingUserId] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Fetch chat history for the active conversation (cached per userId)
+  // Fetch conversations list & admins when opening chat tab
   useEffect(() => {
-    if (activeTab === 'chat' && activeConversation) {
-      fetchChatHistory(activeConversation.userId);
+    if (activeTab === 'chat') {
+      fetchConversations(true);
+      fetchAdmins();
     }
-  }, [activeTab, activeConversation]);
-
-  // Fetch conversations list when opening chat tab (light TTL: 30s)
-  useEffect(() => {
-    if (activeTab === 'chat') fetchConversations();
   }, [activeTab]);
 
   useEffect(() => {
@@ -273,38 +323,64 @@ const AdminDashboard = () => {
       newSocket.emit('joinChat', user.id);
 
       newSocket.on('receiveChatMessage', (message) => {
-        const fromUser =
-          message.senderId === user?.id ? message.receiverId : message.senderId;
-        // Append to the correct per-user chat history in the store
+        const fromUser = message.senderId === user?.id ? message.receiverId : message.senderId;
         appendAdminChatMessage(fromUser, message);
-        // Update conversation list (unread badge, last message preview)
         upsertConversation(message, user?.id);
+      });
+
+      newSocket.on('ticketStatusChanged', ({ id, status }) => {
+        fetchConversations(true);
+        if (activeConversation && Number(id) === Number(activeConversation.id)) {
+          fetchConversationMessages(activeConversation.id);
+        }
+      });
+      newSocket.on('ticketAssigned', ({ id, assignedAdminId, assignedAdminName }) => {
+        fetchConversations(true);
+        if (activeConversation && Number(id) === Number(activeConversation.id)) {
+          fetchConversationMessages(activeConversation.id);
+        }
+      });
+      newSocket.on('ticketArchived', ({ id, isArchived }) => {
+        fetchConversations(true);
+        if (activeConversation && Number(id) === Number(activeConversation.id)) {
+          fetchConversationMessages(activeConversation.id);
+        }
       });
 
       return () => newSocket.disconnect();
     }
   }, [activeTab, user, activeConversation]);
 
-  const sendAdminMessage = async (text = '', imageUrl = null) => {
-    if ((!text.trim() && !imageUrl) || !activeConversation) return;
+  const sendAdminMessage = async (text = '', imageUrl = null, fileUrl = null, fileName = null) => {
+    if ((!text.trim() && !imageUrl && !fileUrl) || !activeConversation || isSendingMessage) return;
+    setIsSendingMessage(true);
     try {
       await axios.post('/api/admin/chat/send', {
         receiverId: activeConversation.userId,
         senderId: user?.id,
+        conversationId: activeConversation.id,
         text,
         image: imageUrl,
+        fileUrl,
+        fileName,
       });
-      // Optimistically add to local cache so it shows immediately
+      
       appendAdminChatMessage(activeConversation.userId, {
+        id: Date.now(),
         senderId: user?.id,
         senderName: 'Support Agent',
+        conversationId: activeConversation.id,
         text,
         image: imageUrl,
+        fileUrl,
+        fileName,
         createdAt: new Date().toISOString(),
       });
       setChatInput('');
     } catch (err) {
       alert('Failed to send message.');
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -314,14 +390,21 @@ const AdminDashboard = () => {
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('category', 'ChatAttachment');
+    
+    const fileType = file.type;
+    const isImage = fileType.startsWith('image/');
+    
     try {
-      const res = await axios.post('/api/documents/upload', formData, {
+      const res = await axios.post('/api/chat/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      sendAdminMessage('', res.data.path);
+      if (isImage) {
+        sendAdminMessage('', res.data.fileUrl);
+      } else {
+        sendAdminMessage('', null, res.data.fileUrl, res.data.fileName);
+      }
     } catch (err) {
-      alert('Failed to upload image. Please try again.');
+      alert('Failed to upload file. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -616,7 +699,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map(u => (
+                    {paginatedUsers.map(u => (
                       <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
                         <td className="py-4 pr-4">
                           <div className="flex items-center gap-3">
@@ -641,13 +724,22 @@ const AdminDashboard = () => {
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
+                              disabled={suspendingUserId === u.id}
                               onClick={() => toggleUserStatus(u.id)}
                               className={`p-2 rounded-lg transition-colors ${
                                 u.status === 'active' ? 'hover:bg-red-50 text-red-500' : 'hover:bg-emerald-50 text-emerald-600'
-                              }`}
+                              } disabled:opacity-50`}
                               title={u.status === 'active' ? 'Suspend user' : 'Reactivate user'}
                             >
-                              <Ban className="w-4 h-4" />
+                              {suspendingUserId === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                            </button>
+                            <button
+                              disabled={deletingUserId === u.id || u.id === user?.id}
+                              onClick={() => handleDeleteUser(u.id)}
+                              className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors disabled:opacity-30"
+                              title={u.id === user?.id ? "You cannot delete yourself" : "Delete user"}
+                            >
+                              {deletingUserId === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                             </button>
                           </div>
                         </td>
@@ -660,6 +752,29 @@ const AdminDashboard = () => {
                     )}
                   </tbody>
                 </table>
+                {filteredUsers.length > 10 && (
+                  <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-100">
+                    <span className="text-xs font-semibold text-slate-500">
+                      Showing {(userPage - 1) * 10 + 1} to {Math.min(userPage * 10, filteredUsers.length)} of {filteredUsers.length} users
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={userPage === 1}
+                        onClick={() => setUserPage(p => Math.max(1, p - 1))}
+                        className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        disabled={userPage * 10 >= filteredUsers.length}
+                        onClick={() => setUserPage(p => p + 1)}
+                        className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -702,16 +817,20 @@ const AdminDashboard = () => {
                         </span>
                         <div className="flex gap-2">
                           <button
+                            disabled={processingTxId === t.id}
                             onClick={() => handleTxDecision(t.id, 'approve')}
-                            className="flex items-center gap-1.5 bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-emerald-600 hover:-translate-y-0.5 transition-all"
+                            className="flex items-center gap-1.5 bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-emerald-600 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
                           >
-                            <CheckCircle2 className="w-4 h-4" /> Approve
+                            {processingTxId === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            {processingTxId === t.id ? 'Processing...' : 'Approve'}
                           </button>
                           <button
+                            disabled={processingTxId === t.id}
                             onClick={() => handleTxDecision(t.id, 'reject')}
-                            className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all"
+                            className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all disabled:opacity-50"
                           >
-                            <XCircle className="w-4 h-4" /> Reject
+                            {processingTxId === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                            {processingTxId === t.id ? 'Processing...' : 'Reject'}
                           </button>
                         </div>
                       </div>
@@ -741,7 +860,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {investments.map(inv => (
+                    {paginatedInvestments.map(inv => (
                       <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
                         <td className="py-4 pr-4 font-bold text-slate-800">{inv.user}</td>
                         <td className="py-4 pr-4 text-slate-600 font-medium">{inv.plan}</td>
@@ -756,6 +875,29 @@ const AdminDashboard = () => {
                     ))}
                   </tbody>
                 </table>
+                {investments.length > 10 && (
+                  <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-100">
+                    <span className="text-xs font-semibold text-slate-500">
+                      Showing {(investmentsPage - 1) * 10 + 1} to {Math.min(investmentsPage * 10, investments.length)} of {investments.length} investments
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={investmentsPage === 1}
+                        onClick={() => setInvestmentsPage(p => Math.max(1, p - 1))}
+                        className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        disabled={investmentsPage * 10 >= investments.length}
+                        onClick={() => setInvestmentsPage(p => p + 1)}
+                        className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -781,7 +923,7 @@ const AdminDashboard = () => {
                     className="flex items-center gap-2 bg-gradient-to-r from-brand-primary to-blue-500 text-white px-6 py-3 rounded-xl font-bold shadow-md shadow-brand-primary/25 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
                   >
                     {isSendingBroadcast ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-4 h-4" />}
-                    Publish Broadcast
+                    {isSendingBroadcast ? 'Processing...' : 'Publish Broadcast'}
                   </button>
                 </div>
               </div>
@@ -806,87 +948,252 @@ const AdminDashboard = () => {
           {/* SUPPORT CHAT TAB */}
           {activeTab === 'chat' && (
             <div className="fade-in h-[calc(100vh-140px)] md:h-[650px] bg-white border border-slate-200 rounded-3xl shadow-lg overflow-hidden flex font-sans">
-              {/* Conversation list */}
-              <div className={`w-full sm:w-72 border-r border-slate-100 flex-col ${activeConversation ? 'hidden sm:flex' : 'flex'}`}>
-                <div className="p-4 border-b border-slate-100">
-                  <h3 className="font-bold text-slate-800">Conversations</h3>
+              {/* Left Panel: Conversation list with search & filters */}
+              <div className={`w-full sm:w-80 border-r border-slate-100 flex-col shrink-0 ${activeConversation ? 'hidden sm:flex' : 'flex'}`}>
+                {/* Search & Filters */}
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3 shrink-0 text-left">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input 
+                      type="text" 
+                      placeholder="Search conversations..."
+                      value={conversationFilters.search}
+                      onChange={(e) => setConversationFilters({ search: e.target.value })}
+                      className="w-full bg-white border border-slate-250 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-700 focus:outline-none focus:border-brand-primary"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">Status</label>
+                      <select 
+                        value={conversationFilters.status}
+                        onChange={(e) => setConversationFilters({ status: e.target.value })}
+                        className="w-full bg-white border border-slate-250 rounded-xl px-2 py-1.5 text-xs text-slate-700 focus:outline-none"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="Open">Open</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Resolved">Resolved</option>
+                        <option value="Closed">Closed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">Assigned To</label>
+                      <select 
+                        value={conversationFilters.assignedAdminId}
+                        onChange={(e) => setConversationFilters({ assignedAdminId: e.target.value })}
+                        className="w-full bg-white border border-slate-250 rounded-xl px-2 py-1.5 text-xs text-slate-700 focus:outline-none"
+                      >
+                        <option value="all">Everyone</option>
+                        <option value="me">Me</option>
+                        <option value="unassigned">Unassigned</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="checkbox" 
+                      id="showArchived" 
+                      checked={conversationFilters.isArchived}
+                      onChange={(e) => setConversationFilters({ isArchived: e.target.checked })}
+                      className="rounded text-brand-primary focus:ring-brand-primary/30 border-slate-300 w-4 h-4"
+                    />
+                    <label htmlFor="showArchived" className="text-[10px] font-bold text-slate-600 cursor-pointer">Show Archived Chats</label>
+                  </div>
                 </div>
+
+                {/* Conversation List */}
                 <div className="flex-grow overflow-y-auto">
-                  {conversations.map(c => (
-                    <button
-                      key={c.userId}
-                      onClick={() => {
-                        setActiveConversation(c);
-                        markConversationRead(c.userId);
-                      }}
-                      className={`w-full flex items-center gap-3 p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left ${
-                        activeConversation?.userId === c.userId ? 'bg-blue-50/60' : ''
-                      }`}
-                    >
-                      <img src={`https://ui-avatars.com/api/?name=${c.username}&background=2563eb&color=fff`} className="w-10 h-10 rounded-full flex-shrink-0" alt={c.username} />
-                      <div className="min-w-0 flex-grow">
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold text-slate-800 text-sm truncate">{c.username}</p>
-                          <span className="text-[10px] text-slate-400 font-bold flex-shrink-0">{c.time}</span>
-                        </div>
-                        <p className="text-xs text-slate-500 truncate">{c.lastMessage}</p>
-                      </div>
-                      {c.unread > 0 && (
-                        <span className="w-5 h-5 flex items-center justify-center bg-brand-primary text-white text-[10px] font-black rounded-full flex-shrink-0">{c.unread}</span>
-                      )}
-                    </button>
-                  ))}
+                  {conversations.map(c => {
+                     const isSelected = activeConversation?.id === c.id;
+                     return (
+                       <button
+                         key={c.id}
+                         onClick={() => {
+                           selectConversation(c);
+                         }}
+                         className={`w-full flex items-center gap-3 p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors text-left ${
+                           isSelected ? 'bg-blue-50/60' : ''
+                         }`}
+                       >
+                         <img src={`https://ui-avatars.com/api/?name=${c.username}&background=2563eb&color=fff`} className="w-10 h-10 rounded-full flex-shrink-0" alt={c.username} />
+                         <div className="min-w-0 flex-grow">
+                           <div className="flex items-center justify-between mb-0.5">
+                             <p className="font-bold text-slate-800 text-sm truncate">{c.username}</p>
+                             <span className="text-[9px] text-slate-400 font-bold flex-shrink-0">
+                               {new Date(c.lastMessageAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                             </span>
+                           </div>
+                           <p className="text-[11px] font-semibold text-brand-primary truncate">{c.subject}</p>
+                           <p className="text-xs text-slate-500 truncate">{c.lastMessage || 'No messages yet'}</p>
+                           
+                           {/* Status & assignment badges */}
+                           <div className="flex items-center space-x-2 mt-2">
+                             <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                               c.status === 'Open' ? 'bg-blue-100 text-blue-700' :
+                               c.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                               c.status === 'Resolved' ? 'bg-emerald-100 text-emerald-700' :
+                               'bg-slate-100 text-slate-700'
+                             }`}>
+                               {c.status}
+                             </span>
+                             <span className="text-[9px] font-medium text-slate-400 truncate">
+                               {c.assignedAdminId 
+                                 ? c.assignedAdminId === user?.id ? 'Assigned to me' : `Assigned: ${c.assignedAdminName || 'Agent'}`
+                                 : 'Unassigned'}
+                             </span>
+                           </div>
+                         </div>
+                         {c.unread > 0 && (
+                           <span className="w-5 h-5 flex items-center justify-center bg-brand-primary text-white text-[10px] font-black rounded-full flex-shrink-0">{c.unread}</span>
+                         )}
+                       </button>
+                     );
+                  })}
+                  {conversations.length === 0 && (
+                     <div className="p-8 text-center text-slate-400 text-sm font-medium">
+                        No conversations found matching filters.
+                     </div>
+                  )}
                 </div>
               </div>
 
               {/* Chat panel */}
               <div className={`flex-grow flex-col ${activeConversation ? 'flex' : 'hidden sm:flex'}`}>
                 {!activeConversation ? (
-                  <div className="flex-grow flex items-center justify-center text-slate-400 font-bold">
+                  <div className="flex-grow flex items-center justify-center text-slate-400 font-bold bg-slate-50/20">
                     Select a conversation to start chatting
                   </div>
                 ) : (
                   <>
-                    <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50">
-                      <button className="sm:hidden text-slate-500" onClick={() => setActiveConversation(null)}>
-                        <X className="w-5 h-5" />
-                      </button>
-                      <img src={`https://ui-avatars.com/api/?name=${activeConversation.username}&background=2563eb&color=fff`} className="w-9 h-9 rounded-full" alt={activeConversation.username} />
-                      <span className="font-bold text-slate-800">{activeConversation.username}</span>
-                    </div>
-
-                    <div className="flex-grow p-4 sm:p-6 space-y-4 overflow-y-auto bg-slate-50/50">
-                      {chatMessages.length === 0 ? (
-                        <p className="text-center text-slate-400 text-sm font-medium">No messages yet in this conversation.</p>
-                      ) : chatMessages.map((msg) => {
-                        const isSelf = msg.senderId === user?.id;
-                        return (
-                          <div key={msg.id || msg._id || Math.random()} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
-                            <div className={`relative px-4 py-2.5 rounded-[18px] text-[15px] leading-tight shadow-sm border max-w-[75%] ${
-                              isSelf
-                                ? 'bg-gradient-to-r from-brand-primary to-blue-500 text-white rounded-br-[4px] border-brand-primary/20'
-                                : 'bg-white text-slate-700 border-slate-200 rounded-bl-[4px]'
-                            }`}>
-                              {msg.text && <p className="font-normal">{msg.text}</p>}
-                              {msg.image && (
-                                <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block mt-2 overflow-hidden rounded-xl">
-                                  <img src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} alt="attachment" className="w-full max-w-[260px] object-cover" />
-                                </a>
-                              )}
-                              <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-slate-400'}`}>
-                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
+                    {/* Header with ticket management options */}
+                    <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 shrink-0">
+                      <div className="flex items-center gap-3">
+                        <button className="sm:hidden text-slate-500" onClick={() => selectConversation(null)}>
+                          <X className="w-5 h-5" />
+                        </button>
+                        <img src={`https://ui-avatars.com/api/?name=${activeConversation.username}&background=2563eb&color=fff`} className="w-9 h-9 rounded-full" alt={activeConversation.username} />
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                             <span className="font-bold text-slate-800 text-base">{activeConversation.username}</span>
+                             <span className="text-xs font-semibold text-slate-400">({activeConversation.userRole || 'User'})</span>
                           </div>
-                        );
-                      })}
+                          <span className="text-xs font-bold text-brand-primary block">{activeConversation.subject}</span>
+                        </div>
+                      </div>
+
+                      {/* Ticket controls */}
+                      <div className="flex flex-wrap items-center gap-3">
+                         {/* Search messages query */}
+                         <input 
+                            type="text" 
+                            placeholder="Search messages..."
+                            value={searchMessageQuery}
+                            onChange={(e) => setSearchMessageQuery(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary w-36"
+                         />
+
+                         {/* Assign Admin dropdown */}
+                         <div className="flex items-center space-x-1">
+                            <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                            <select 
+                               value={activeConversation.assignedAdminId || ''}
+                               onChange={(e) => assignTicket(activeConversation.id, e.target.value ? parseInt(e.target.value) : null)}
+                               className="bg-white border border-slate-200 rounded-xl px-2 py-1 text-xs text-slate-700 focus:outline-none"
+                            >
+                               <option value="">Unassigned</option>
+                               {admins.map(adm => (
+                                  <option key={adm.id} value={adm.id}>{adm.username} {adm.id === user?.id ? '(me)' : ''}</option>
+                               ))}
+                            </select>
+                         </div>
+
+                         {/* Status switcher */}
+                         <select 
+                            value={activeConversation.status}
+                            onChange={(e) => updateTicketStatus(activeConversation.id, e.target.value)}
+                            className="bg-white border border-slate-200 rounded-xl px-2 py-1 text-xs text-slate-700 focus:outline-none font-bold"
+                         >
+                            <option value="Open">Open</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Resolved">Resolved</option>
+                            <option value="Closed">Closed</option>
+                         </select>
+
+                         {/* Archive toggle */}
+                         <button
+                            onClick={() => archiveTicket(activeConversation.id, !activeConversation.isArchived)}
+                            className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold transition ${
+                               activeConversation.isArchived 
+                                  ? 'bg-slate-200 text-slate-700 hover:bg-slate-350' 
+                                  : 'bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100'
+                            }`}
+                         >
+                            <Archive className="w-3.5 h-3.5" />
+                            {activeConversation.isArchived ? 'Unarchive' : 'Archive'}
+                         </button>
+                      </div>
                     </div>
 
-                    <div className="p-4 border-t border-slate-100 bg-white">
+                    {/* Chat Messages scroll area */}
+                    <div className="flex-grow p-4 sm:p-6 space-y-4 overflow-y-auto bg-slate-50/50 flex flex-col scrollbar-thin">
+                      {chatMessages
+                        .filter(m => !searchMessageQuery || m.text?.toLowerCase().includes(searchMessageQuery.toLowerCase()))
+                        .map((msg, index) => {
+                          const isSelf = msg.senderId === user?.id;
+                          return (
+                            <div key={msg.id || index} className={`flex ${isSelf ? 'justify-end' : 'justify-start'} items-end space-x-2`}>
+                              {!isSelf && (
+                                <img src={`https://ui-avatars.com/api/?name=${activeConversation.username}&background=2563eb&color=fff`} className="w-7 h-7 rounded-full mb-1 flex-shrink-0 border border-slate-200 shadow-sm" alt="avatar" />
+                              )}
+                              <div className={`relative px-4 py-2.5 rounded-[18px] text-[15px] leading-tight shadow-sm border max-w-[70%] text-left ${
+                                isSelf
+                                  ? 'bg-gradient-to-r from-brand-primary to-blue-500 text-white rounded-br-[4px] border-brand-primary/20'
+                                  : 'bg-white text-slate-700 border-slate-200 rounded-bl-[4px]'
+                              }`}>
+                                {msg.text && <p className="font-normal">{msg.text}</p>}
+                                {msg.image && (
+                                  <a href={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} target="_blank" rel="noopener noreferrer" className="block mt-2 overflow-hidden rounded-xl border border-slate-100 p-1">
+                                    <img src={msg.image.startsWith('http') ? msg.image : `/${msg.image}`} alt="attachment" className="w-full max-w-[260px] sm:max-w-md object-cover rounded-lg" />
+                                  </a>
+                                )}
+                                {msg.fileUrl && (
+                                   <div className="mt-2 flex items-center space-x-2 bg-slate-50 border border-slate-150 p-2.5 rounded-xl hover:border-brand-primary transition">
+                                      <Paperclip className="w-4 h-4 text-brand-primary flex-shrink-0" />
+                                      <div className="overflow-hidden flex-grow mr-4">
+                                         <span className="text-xs font-bold text-slate-700 block truncate">{msg.fileName || 'Attachment'}</span>
+                                      </div>
+                                      <a 
+                                         href={msg.fileUrl.startsWith('http') ? msg.fileUrl : `/${msg.fileUrl}`} 
+                                         download={msg.fileName}
+                                         target="_blank"
+                                         rel="noopener noreferrer"
+                                         className="text-xs font-black uppercase text-brand-primary hover:underline flex-shrink-0"
+                                      >
+                                         Download
+                                      </a>
+                                   </div>
+                                )}
+                                <span className={`text-[8px] font-semibold block mt-1 uppercase tracking-tighter ${isSelf ? 'text-white/70 text-right' : 'text-slate-400'}`}>
+                                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {chatMessages.length === 0 && (
+                         <div className="flex-grow flex items-center justify-center text-slate-400 text-sm">
+                            No messages in this chat.
+                         </div>
+                      )}
+                    </div>
+
+                    {/* Composer input bar */}
+                    <div className="p-4 border-t border-slate-100 bg-white shrink-0">
                       <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-full">
-                        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleAdminFileUpload} className="hidden" />
+                        <input type="file" ref={fileInputRef} onChange={handleAdminFileUpload} className="hidden" />
                         <button type="button" disabled={isUploading} onClick={() => fileInputRef.current.click()} className="p-2.5 hover:bg-slate-200 rounded-full transition text-brand-primary shrink-0">
-                          {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Image className="w-5 h-5" />}
+                          {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
                         </button>
                         <input
                           type="text"
@@ -896,9 +1203,13 @@ const AdminDashboard = () => {
                           className="flex-grow bg-transparent border-none focus:ring-0 px-3 py-1.5 text-sm sm:text-base text-slate-700 placeholder-slate-400 font-medium"
                           placeholder="Reply to user..."
                         />
-                        <button onClick={() => sendAdminMessage(chatInput)} className="text-brand-primary hover:text-blue-600 p-2.5 hover:scale-105 active:scale-95 transition shrink-0">
-                          <Send className="w-5 h-5 fill-current" />
-                        </button>
+                        <button 
+                            onClick={() => sendAdminMessage(chatInput)} 
+                            disabled={isSendingMessage}
+                            className="text-brand-primary hover:text-blue-600 p-2.5 hover:scale-105 active:scale-95 transition shrink-0 disabled:opacity-50"
+                         >
+                           {isSendingMessage ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 fill-current" />}
+                         </button>
                       </div>
                     </div>
                   </>
@@ -989,7 +1300,7 @@ const AdminDashboard = () => {
                       className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-primary to-blue-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-brand-primary/25 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50"
                     >
                       {isCreatingTask ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckSquare className="w-5 h-5" />}
-                      Create and Assign Task ({selectedUsers.length} selected)
+                      {isCreatingTask ? 'Processing...' : `Create and Assign Task (${selectedUsers.length} selected)`}
                     </button>
                   </div>
                 </form>

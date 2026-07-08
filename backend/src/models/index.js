@@ -27,6 +27,7 @@ const Message = require('./message.model')(sequelize);
 const Transaction = require('./transaction.model')(sequelize);
 const Investment = require('./investment.model')(sequelize);
 const RefreshToken = require('./refreshToken.model')(sequelize);
+const SupportConversation = require('./supportConversation.model')(sequelize);
 
 // ── Associations ──────────────────────────────────────────────────────────────
 
@@ -54,6 +55,16 @@ User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
 User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
 Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
 Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
+
+// SupportConversations associations
+User.hasMany(SupportConversation, { foreignKey: 'userId', as: 'supportConversations', onDelete: 'CASCADE' });
+SupportConversation.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+User.hasMany(SupportConversation, { foreignKey: 'assignedAdminId', as: 'assignedConversations', onDelete: 'SET NULL' });
+SupportConversation.belongsTo(User, { foreignKey: 'assignedAdminId', as: 'assignedAdmin' });
+
+SupportConversation.hasMany(Message, { foreignKey: 'conversationId', as: 'messages', onDelete: 'CASCADE' });
+Message.belongsTo(SupportConversation, { foreignKey: 'conversationId', as: 'conversation' });
 
 // Department ↔ Employee
 Department.hasMany(Employee, { foreignKey: 'departmentId', onDelete: 'SET NULL' });
@@ -116,4 +127,5 @@ module.exports = {
   Transaction,
   Investment,
   RefreshToken,
+  SupportConversation,
 };

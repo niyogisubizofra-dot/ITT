@@ -37,7 +37,7 @@ const initSocket = (httpServer) => {
 
     // Admin joins admin room
     socket.on('joinAdmin', () => {
-      if (socket.user?.role && ['CEO', 'Chairman', 'Admin'].includes(socket.user.role)) {
+      if (socket.user?.role && socket.user.role === 'Admin') {
         socket.join('admin_room');
       }
     });
@@ -45,12 +45,61 @@ const initSocket = (httpServer) => {
     // Send chat message
     socket.on('sendMessage', async ({ receiverId, senderId, text, image }) => {
       try {
-        const msg = await Message.create({ senderId, receiverId, text, image });
+        const { SupportConversation } = require('../models');
+        const { Op } = require('sequelize');
+
+        // Find or create active support conversation
+        let conv = await SupportConversation.findOne({
+          where: {
+            userId: senderId,
+            status: { [Op.in]: ['Open', 'Pending'] },
+          },
+          order: [['updatedAt', 'DESC']],
+        });
+
+        if (!conv) {
+          conv = await SupportConversation.create({
+            userId: senderId,
+            subject: 'Support Chat',
+            status: 'Open',
+          });
+        }
+
+        const msg = await Message.create({
+          senderId,
+          receiverId,
+          conversationId: conv.id,
+          text,
+          image,
+        });
+
+        await conv.update({
+          lastMessage: text || 'Image',
+          lastMessageAt: msg.createdAt,
+        });
+
         const sender = await User.findByPk(senderId, { attributes: ['id', 'username', 'avatar'] });
 
         const payload = { ...msg.toJSON(), senderName: sender?.username };
         io.to(`user_${receiverId}`).emit('receiveChatMessage', payload);
         io.to(`user_${senderId}`).emit('receiveChatMessage', payload);
+
+        if (!conv.assignedAdminId) {
+          io.to('admin_room').emit('receiveChatMessage', payload);
+        }
+
+        // Emit conversation updates
+        const convPayload = {
+          id: conv.id,
+          userId: conv.userId,
+          assignedAdminId: conv.assignedAdminId,
+          status: conv.status,
+          subject: conv.subject,
+          lastMessage: conv.lastMessage,
+          lastMessageAt: conv.lastMessageAt,
+        };
+        io.to(`user_${conv.userId}`).emit('conversationUpdated', convPayload);
+        io.to('admin_room').emit('conversationUpdated', convPayload);
       } catch (err) {
         logger.error('Socket sendMessage error:', err.message);
       }

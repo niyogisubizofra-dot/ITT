@@ -1,12 +1,12 @@
 const { Op } = require('sequelize');
-const { User, Transaction, Investment } = require('../models');
+const { User, Transaction, Investment, sequelize } = require('../models');
 const { paginate, paginatedResponse } = require('../utils/pagination');
 const { emitDashboardUpdate } = require('../sockets');
 
 exports.getStats = async (req, res, next) => {
   try {
     const [totalUsers, totalDeposits, totalWithdrawals, activeInvestments, platformBalance] = await Promise.all([
-      User.count({ where: { role: 'User' } }),
+      User.count({ where: { role: 'Client' } }),
       Transaction.sum('amount', { where: { type: 'deposit', status: 'approved' } }),
       Transaction.sum('amount', { where: { type: 'withdrawal', status: 'approved' } }),
       Investment.count({ where: { status: 'active' } }),
@@ -80,19 +80,33 @@ exports.getUsers = async (req, res, next) => {
       order: [['createdAt', 'DESC']],
     });
 
-    // Attach investment count per user
-    const usersWithInvestments = await Promise.all(
-      rows.map(async (u) => {
-        const investments = await Investment.count({ where: { userId: u.id } });
-        const raw = u.toJSON();
-        return {
-          ...raw,
-          balance: parseFloat(raw.balance) || 0,
-          joined: raw.createdAt,
-          investments,
-        };
-      })
-    );
+    // Optimize: query investment counts for all users in one query using GROUP BY userId
+    const investmentCounts = await Investment.findAll({
+      attributes: [
+        'userId',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      where: {
+        userId: { [Op.in]: rows.map(u => u.id) }
+      },
+      group: ['userId'],
+      raw: true
+    });
+
+    const investmentCountMap = investmentCounts.reduce((map, item) => {
+      map[item.userId] = parseInt(item.count) || 0;
+      return map;
+    }, {});
+
+    const usersWithInvestments = rows.map((u) => {
+      const raw = u.toJSON();
+      return {
+        ...raw,
+        balance: parseFloat(raw.balance) || 0,
+        joined: raw.createdAt,
+        investments: investmentCountMap[u.id] || 0,
+      };
+    });
 
     // Always return a plain array so frontend can safely use .length
     res.json(usersWithInvestments);
@@ -110,6 +124,22 @@ exports.toggleUserStatus = async (req, res, next) => {
     await user.update({ status: newStatus });
 
     res.json({ msg: `User ${newStatus}`, status: newStatus });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.deleteUser = async (req, res, next) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot delete yourself.' });
+    }
+
+    await user.destroy();
+    res.json({ msg: 'User deleted successfully' });
   } catch (err) {
     next(err);
   }
@@ -234,18 +264,32 @@ exports.createBroadcast = async (req, res, next) => {
 
 exports.getChatHistory = async (req, res, next) => {
   try {
-    const { Message } = require('../models');
+    const { Message, SupportConversation } = require('../models');
     const { userId } = req.params;
 
+    // Find latest conversation for this user
+    let conv = await SupportConversation.findOne({
+      where: { userId },
+      order: [['updatedAt', 'DESC']],
+    });
+
+    if (!conv) {
+      // Create a default conversation so they have one
+      conv = await SupportConversation.create({
+        userId,
+        subject: 'Support Thread',
+        status: 'Open',
+        assignedAdminId: req.user.id,
+      });
+    }
+
     const messages = await Message.findAll({
-      where: {
-        [Op.or]: [
-          { senderId: req.user.id, receiverId: userId },
-          { senderId: userId, receiverId: req.user.id },
-        ],
-      },
+      where: { conversationId: conv.id },
+      include: [
+        { model: User, as: 'sender', attributes: ['id', 'username', 'avatar', 'role'] },
+      ],
       order: [['createdAt', 'ASC']],
-      limit: 100,
+      limit: 200,
     });
 
     res.json(messages);
@@ -256,10 +300,117 @@ exports.getChatHistory = async (req, res, next) => {
 
 exports.sendChatMessage = async (req, res, next) => {
   try {
-    const { Message } = require('../models');
-    const { receiverId, text, image } = req.body;
+    const { Message, SupportConversation, User } = require('../models');
+    const { receiverId, text, image, fileUrl, fileName, conversationId } = req.body;
+    const senderId = req.user.id;
 
-    const msg = await Message.create({ senderId: req.user.id, receiverId, text, image });
+    if (!text?.trim() && !image && !fileUrl) {
+      return res.status(400).json({ error: 'Message text, image, or file required' });
+    }
+
+    let activeConvId = conversationId;
+    let conv;
+
+    if (activeConvId) {
+      conv = await SupportConversation.findByPk(activeConvId);
+      if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    } else {
+      // Find latest conversation for this user
+      conv = await SupportConversation.findOne({
+        where: {
+          userId: receiverId,
+          status: { [Op.in]: ['Open', 'Pending'] },
+        },
+        order: [['updatedAt', 'DESC']],
+      });
+
+      if (!conv) {
+        conv = await SupportConversation.create({
+          userId: receiverId,
+          subject: 'Support Thread',
+          status: 'Pending',
+          assignedAdminId: senderId,
+        });
+      }
+      activeConvId = conv.id;
+    }
+
+    // Set assigned admin if unassigned
+    if (!conv.assignedAdminId) {
+      await conv.update({ assignedAdminId: senderId });
+    }
+
+    const msg = await Message.create({
+      senderId,
+      receiverId,
+      conversationId: activeConvId,
+      text: text || null,
+      image: image || null,
+      fileUrl: fileUrl || null,
+      fileName: fileName || null,
+    });
+
+    // Update conversation last message & status to Pending (waiting for user response)
+    await conv.update({
+      lastMessage: text || (fileUrl ? 'Attachment' : 'Image'),
+      lastMessageAt: msg.createdAt,
+      status: 'Pending',
+    });
+
+    // Emit live Socket.IO update
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      const sender = await User.findByPk(senderId, { attributes: ['id', 'username', 'avatar'] });
+      const payload = {
+        id: msg.id,
+        senderId,
+        receiverId,
+        conversationId: activeConvId,
+        senderName: sender?.username || req.user.username,
+        text: msg.text,
+        image: msg.image,
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName,
+        createdAt: msg.createdAt,
+        isRead: msg.isRead,
+      };
+
+      io.to(`user_${receiverId}`).emit('receiveChatMessage', payload);
+      io.to(`user_${senderId}`).emit('receiveChatMessage', payload);
+      io.to('admin_room').emit('receiveChatMessage', payload);
+
+      // Emit list update
+      const convPayload = {
+        id: conv.id,
+        userId: conv.userId,
+        assignedAdminId: conv.assignedAdminId,
+        status: conv.status,
+        subject: conv.subject,
+        lastMessage: conv.lastMessage,
+        lastMessageAt: conv.lastMessageAt,
+      };
+      io.to(`user_${conv.userId}`).emit('conversationUpdated', convPayload);
+      io.to('admin_room').emit('conversationUpdated', convPayload);
+    } catch (e) {
+      console.error('Socket emit failed:', e.message);
+    }
+
+    // Notifications
+    try {
+      const { createNotification } = require('../services/notification.service');
+      const messagePreview = text || (fileUrl ? 'Attachment' : 'Image');
+      await createNotification({
+        userId: receiverId,
+        title: 'Support Agent Replied',
+        message: messagePreview,
+        type: 'info',
+        link: '/dashboard?tab=chat',
+      });
+    } catch (e) {
+      console.error('Notification failed:', e.message);
+    }
+
     res.status(201).json(msg);
   } catch (err) {
     next(err);
@@ -268,40 +419,222 @@ exports.sendChatMessage = async (req, res, next) => {
 
 exports.getConversations = async (req, res, next) => {
   try {
-    const { Message, User } = require('../models');
-    const { sequelize } = require('../models');
+    const { SupportConversation, User, Message } = require('../models');
+    const { search, status, assignedAdminId, isArchived } = req.query;
 
-    // Get distinct users who have messaged admin
-    const messages = await Message.findAll({
-      where: {
-        [Op.or]: [{ senderId: req.user.id }, { receiverId: req.user.id }],
-      },
-      order: [['createdAt', 'DESC']],
-    });
+    const where = {};
 
-    const userMap = new Map();
-    for (const msg of messages) {
-      const otherId = msg.senderId === req.user.id ? msg.receiverId : msg.senderId;
-      if (!userMap.has(otherId)) {
-        userMap.set(otherId, msg);
+    // Filter by archived status
+    where.isArchived = isArchived === 'true';
+
+    // Filter by status
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+
+    // Filter by assignment
+    if (assignedAdminId) {
+      if (assignedAdminId === 'unassigned') {
+        where.assignedAdminId = null;
+      } else if (assignedAdminId === 'me') {
+        where.assignedAdminId = req.user.id;
+      } else {
+        where.assignedAdminId = parseInt(assignedAdminId);
       }
     }
 
-    const conversations = await Promise.all(
-      Array.from(userMap.entries()).map(async ([userId, lastMsg]) => {
-        const user = await User.findByPk(userId, { attributes: ['id', 'username', 'avatar'] });
-        const unread = await Message.count({ where: { senderId: userId, receiverId: req.user.id, isRead: false } });
+    // Filter by search query (user username, email, subject, or message text)
+    const userWhere = {};
+    if (search) {
+      userWhere[Op.or] = [
+        { username: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+      ];
+      where[Op.or] = [
+        { subject: { [Op.iLike]: `%${search}%` } },
+        { lastMessage: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    // Fetch conversations
+    const conversations = await SupportConversation.findAll({
+      where,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          where: search ? userWhere : undefined,
+          attributes: ['id', 'username', 'email', 'avatar', 'role'],
+          required: search ? true : false,
+        },
+        {
+          model: User,
+          as: 'assignedAdmin',
+          attributes: ['id', 'username', 'avatar'],
+        }
+      ],
+      order: [['updatedAt', 'DESC']],
+    });
+
+    // Count unread messages per conversation
+    const formatted = await Promise.all(
+      conversations.map(async (c) => {
+        const unread = await Message.count({
+          where: {
+            conversationId: c.id,
+            senderId: c.userId,
+            isRead: false,
+          },
+        });
+
+        // Resolve user if not included because search filter wasn't applied
+        let userVal = c.user;
+        if (!userVal) {
+          userVal = await User.findByPk(c.userId, {
+            attributes: ['id', 'username', 'email', 'avatar', 'role'],
+          });
+        }
+
         return {
-          userId,
-          username: user?.username || `User ${userId}`,
-          lastMessage: lastMsg.text || 'Attachment',
+          id: c.id,
+          userId: c.userId,
+          username: userVal?.username || `User ${c.userId}`,
+          userEmail: userVal?.email,
+          userAvatar: userVal?.avatar,
+          userRole: userVal?.role,
+          assignedAdminId: c.assignedAdminId,
+          assignedAdminName: c.assignedAdmin?.username,
+          status: c.status,
+          subject: c.subject,
+          lastMessage: c.lastMessage || '',
+          lastMessageAt: c.lastMessageAt || c.updatedAt,
           unread,
-          time: lastMsg.createdAt,
+          isArchived: c.isArchived,
         };
       })
     );
 
-    res.json(conversations);
+    res.json(formatted);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getConversationMessages = async (req, res, next) => {
+  try {
+    const { Message, User } = require('../models');
+    const { id } = req.params;
+
+    const messages = await Message.findAll({
+      where: { conversationId: id },
+      include: [
+        { model: User, as: 'sender', attributes: ['id', 'username', 'avatar', 'role'] },
+      ],
+      order: [['createdAt', 'ASC']],
+    });
+
+    res.json(messages);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateConversationStatus = async (req, res, next) => {
+  try {
+    const { SupportConversation } = require('../models');
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const conv = await SupportConversation.findByPk(id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    await conv.update({ status });
+
+    // Emit live update
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      const payload = { id: conv.id, status: conv.status };
+      io.to(`user_${conv.userId}`).emit('ticketStatusChanged', payload);
+      io.to('admin_room').emit('ticketStatusChanged', payload);
+    } catch (e) {}
+
+    res.json({ msg: 'Status updated', status });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.assignConversation = async (req, res, next) => {
+  try {
+    const { SupportConversation, User } = require('../models');
+    const { id } = req.params;
+    const { assignedAdminId } = req.body;
+
+    const conv = await SupportConversation.findByPk(id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    let adminName = null;
+    if (assignedAdminId) {
+      const adminUser = await User.findOne({
+        where: { id: assignedAdminId, role: 'Admin' },
+      });
+      if (!adminUser) return res.status(400).json({ error: 'User is not a valid support agent' });
+      adminName = adminUser.username;
+    }
+
+    await conv.update({ assignedAdminId: assignedAdminId || null });
+
+    // Emit live update
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      const payload = { id: conv.id, assignedAdminId: conv.assignedAdminId, assignedAdminName: adminName };
+      io.to(`user_${conv.userId}`).emit('ticketAssigned', payload);
+      io.to('admin_room').emit('ticketAssigned', payload);
+    } catch (e) {}
+
+    res.json({ msg: 'Ticket assigned', assignedAdminId, assignedAdminName: adminName });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.archiveConversation = async (req, res, next) => {
+  try {
+    const { SupportConversation } = require('../models');
+    const { id } = req.params;
+    const { isArchived } = req.body;
+
+    const conv = await SupportConversation.findByPk(id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    await conv.update({ isArchived: isArchived === true });
+
+    // Emit live update
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      const payload = { id: conv.id, isArchived: conv.isArchived };
+      io.to(`user_${conv.userId}`).emit('ticketArchived', payload);
+      io.to('admin_room').emit('ticketArchived', payload);
+    } catch (e) {}
+
+    res.json({ msg: 'Ticket archive state updated', isArchived: conv.isArchived });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getAdmins = async (req, res, next) => {
+  try {
+    const { User } = require('../models');
+    const admins = await User.findAll({
+      where: { role: 'Admin' },
+      attributes: ['id', 'username', 'email', 'avatar', 'role'],
+      order: [['username', 'ASC']],
+    });
+    res.json(admins);
   } catch (err) {
     next(err);
   }

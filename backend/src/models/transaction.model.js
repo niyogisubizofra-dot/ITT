@@ -12,4 +12,13 @@ module.exports = (sequelize) => sequelize.define('Transaction', {
   processedBy: { type: DataTypes.INTEGER, allowNull: true },
   processedAt: { type: DataTypes.DATE, allowNull: true },
   metadata: { type: DataTypes.JSONB, defaultValue: {} },
-}, { tableName: 'transactions', timestamps: true });
+}, { 
+  tableName: 'transactions', 
+  timestamps: true,
+  indexes: [
+    { fields: ['userId'] },
+    { fields: ['status'] },
+    { fields: ['type'] },
+    { fields: ['createdAt'] },
+  ]
+});

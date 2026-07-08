@@ -9,4 +9,12 @@ module.exports = (sequelize) => sequelize.define('Notification', {
   isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
   link: { type: DataTypes.STRING, allowNull: true },
   readAt: { type: DataTypes.DATE, allowNull: true },
-}, { tableName: 'notifications', timestamps: true });
+}, { 
+  tableName: 'notifications', 
+  timestamps: true,
+  indexes: [
+    { fields: ['userId'] },
+    { fields: ['isRead'] },
+    { fields: ['createdAt'] },
+  ]
+});
