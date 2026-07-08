@@ -46,6 +46,9 @@ Notification.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(ActivityLog, { foreignKey: 'userId', onDelete: 'SET NULL' });
 ActivityLog.belongsTo(User, { foreignKey: 'userId' });
 
+User.hasMany(Task, { foreignKey: 'assignedTo', as: 'assignedTasks', onDelete: 'SET NULL' });
+Task.belongsTo(User, { foreignKey: 'assignedTo', as: 'assignee' });
+
 // Messages (self-referencing User)
 User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages' });
 User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages' });

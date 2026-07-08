@@ -47,3 +47,43 @@ exports.remove = async (req, res, next) => {
     res.json({ msg: 'Task deleted' });
   } catch (err) { next(err); }
 };
+
+exports.getMyTasks = async (req, res, next) => {
+  try {
+    const tasks = await Task.findAll({
+      where: { assignedTo: req.user.id },
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(tasks);
+  } catch (err) { next(err); }
+};
+
+exports.completeMyTask = async (req, res, next) => {
+  try {
+    const task = await Task.findOne({
+      where: { id: req.params.id, assignedTo: req.user.id }
+    });
+    if (!task) return res.status(404).json({ error: 'Task not found or not assigned to you' });
+    await task.update({ status: 'done', completedAt: new Date() });
+    res.json(task);
+  } catch (err) { next(err); }
+};
+
+exports.createBulk = async (req, res, next) => {
+  try {
+    const { assignedTo, ...taskData } = req.body;
+    if (!assignedTo || !Array.isArray(assignedTo) || assignedTo.length === 0) {
+      return res.status(400).json({ error: 'At least one assignee is required' });
+    }
+
+    const tasksToCreate = assignedTo.map(userId => ({
+      ...taskData,
+      assignedTo: userId,
+      createdBy: req.user.id
+    }));
+
+    const createdTasks = await Task.bulkCreate(tasksToCreate);
+    res.status(201).json(createdTasks);
+  } catch (err) { next(err); }
+};
+

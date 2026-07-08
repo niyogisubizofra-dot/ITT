@@ -32,8 +32,43 @@ const Dashboard = () => {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [countdowns, setCountdowns] = useState({});
 
-  const [tasks, setTasks] = useState(mockTasks);
+  const [tasks, setTasks] = useState([]);
   const [notifications, setNotifications] = useState(mockNotifications);
+  const [tasksLoading, setTasksLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      axios.get('/api/tasks/my-tasks')
+        .then(res => setTasks(res.data))
+        .catch(err => console.error('Failed to fetch user tasks', err));
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (activeTab === 'tasks') {
+      setTasksLoading(true);
+      axios.get('/api/tasks/my-tasks')
+        .then(res => {
+          setTasks(res.data);
+          setTasksLoading(false);
+        })
+        .catch(err => {
+          console.error('Failed to fetch tasks', err);
+          setTasksLoading(false);
+        });
+    }
+  }, [activeTab]);
+
+  const handleCompleteTask = async (taskId) => {
+    try {
+      const res = await axios.put(`/api/tasks/my-tasks/${taskId}/complete`);
+      setTasks(prev =>
+        prev.map(t => (t.id === taskId ? { ...t, status: 'done', completedAt: res.data.completedAt } : t))
+      );
+    } catch (err) {
+      alert('Failed to complete task.');
+    }
+  };
 
   // ── Cached dashboard store data ──────────────────────────────────────────
   const referralData = useDashboardStore((s) => s.referralData);
@@ -397,24 +432,30 @@ const Dashboard = () => {
                 </div>
 
                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-                   <h3 className="text-xl font-bold text-slate-800 mb-8">Pending Tasks</h3>
-                   <div className="space-y-4">
-                      {tasks.filter(t => t.status !== 'Completed').map(t => (
-                        <div key={t.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-brand-primary/30 transition">
-                           <div className="flex items-center justify-between mb-2">
-                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                t.priority === 'High' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                              }`}>{t.priority}</span>
-                              <span className="text-[10px] text-slate-400 font-bold">{t.deadline}</span>
-                           </div>
-                           <p className="font-bold text-slate-800">{t.title}</p>
-                           <div className="mt-3 flex items-center text-xs text-brand-primary font-bold">
-                              Go to task <ArrowRight className="w-3 h-3 ml-1" />
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
+                    <h3 className="text-xl font-bold text-slate-800 mb-8">Pending Tasks</h3>
+                    <div className="space-y-4">
+                       {tasks.filter(t => t.status !== 'Completed' && t.status !== 'done').map(t => (
+                         <div key={t.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-brand-primary/30 transition">
+                            <div className="flex items-center justify-between mb-2">
+                               <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                 t.priority?.toLowerCase() === 'high' || t.priority?.toLowerCase() === 'critical' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                               }`}>{t.priority}</span>
+                               <span className="text-[10px] text-slate-400 font-bold">{t.dueDate || t.deadline || 'No deadline'}</span>
+                            </div>
+                            <p className="font-bold text-slate-800">{t.title}</p>
+                            <button
+                              onClick={() => { setSearchParams({ tab: 'tasks' }); setActiveTab('tasks'); }}
+                              className="mt-3 flex items-center text-xs text-brand-primary font-bold hover:underline"
+                            >
+                               Go to task <ArrowRight className="w-3 h-3 ml-1" />
+                            </button>
+                         </div>
+                       ))}
+                       {tasks.filter(t => t.status !== 'Completed' && t.status !== 'done').length === 0 && (
+                         <p className="text-sm font-semibold text-slate-400 text-center py-6">All tasks completed!</p>
+                       )}
+                    </div>
+                 </div>
               </div>
             </div>
           )}
@@ -515,32 +556,52 @@ const Dashboard = () => {
 
           {activeTab === 'tasks' && (
             <div className="fade-in bg-white p-10 rounded-2xl shadow-sm border border-slate-100">
-               <h2 className="text-3xl font-black text-slate-800 mb-8">My Assignments</h2>
-               <div className="space-y-6">
-                  {tasks.map(t => (
-                    <div key={t.id} className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition">
-                       <div className="flex items-center space-x-4">
-                          <div className={`p-3 rounded-xl ${
-                            t.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
-                          }`}>
-                            {t.status === 'Completed' ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
-                          </div>
-                          <div>
-                             <p className="font-bold text-slate-800 text-lg">{t.title}</p>
-                             <p className="text-sm text-slate-400 font-medium">Deadline: {t.deadline}</p>
-                          </div>
-                       </div>
-                       <div className="flex items-center space-x-4">
-                          <span className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest ${
-                            t.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'
-                          }`}>{t.status}</span>
-                          {t.status !== 'Completed' && (
-                            <button className="btn-primary px-4 py-2 text-sm font-bold rounded-xl">Complete Task</button>
-                          )}
-                       </div>
-                    </div>
-                  ))}
-               </div>
+                <h2 className="text-3xl font-black text-slate-800 mb-8">My Assignments</h2>
+                {tasksLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="w-8 h-8 animate-spin text-brand-primary" />
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                     {tasks.map(t => {
+                       const isDone = t.status === 'Completed' || t.status === 'done';
+                       return (
+                         <div key={t.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition gap-4">
+                            <div className="flex items-center space-x-4">
+                               <div className={`p-3 rounded-xl ${
+                                 isDone ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                               }`}>
+                                 {isDone ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
+                               </div>
+                               <div>
+                                  <p className="font-bold text-slate-800 text-lg leading-tight">{t.title}</p>
+                                  {t.description && <p className="text-sm text-slate-500 mt-1">{t.description}</p>}
+                                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+                                    Deadline: {t.dueDate || t.deadline || 'No deadline'}
+                                  </p>
+                               </div>
+                            </div>
+                            <div className="flex items-center space-x-4 self-end sm:self-auto">
+                               <span className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest ${
+                                 isDone ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'
+                               }`}>{isDone ? 'Completed' : t.status}</span>
+                               {!isDone && (
+                                 <button
+                                   onClick={() => handleCompleteTask(t.id)}
+                                   className="btn-primary px-4 py-2 text-sm font-bold rounded-xl"
+                                 >
+                                   Complete Task
+                                 </button>
+                               )}
+                            </div>
+                         </div>
+                       );
+                     })}
+                     {tasks.length === 0 && (
+                       <p className="text-center py-10 text-slate-400 font-bold">No assignments yet.</p>
+                     )}
+                  </div>
+                )}
             </div>
           )}
 

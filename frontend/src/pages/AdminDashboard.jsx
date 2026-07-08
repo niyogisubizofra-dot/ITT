@@ -6,7 +6,7 @@ import {
   Bell, MessageSquare, Zap, LogOut, Home, Menu, X, Search,
   CheckCircle2, XCircle, ArrowRight, ArrowUpRight, ArrowDownRight,
   Send, Image, Loader2, Megaphone, ShieldCheck, Ban, Eye,
-  RefreshCw, UserPlus
+  RefreshCw, UserPlus, CheckSquare, Clock
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -104,7 +104,7 @@ const AdminDashboard = () => {
   }, [searchParams]);
 
   // Ensure activeTab is valid - fallback to overview to avoid blank page
-  const knownTabs = ['overview', 'users', 'transactions', 'investments', 'broadcast', 'chat'];
+  const knownTabs = ['overview', 'users', 'transactions', 'investments', 'broadcast', 'chat', 'tasks'];
   useEffect(() => {
     if (!knownTabs.includes(activeTab)) {
       setSearchParams({ tab: 'overview' });
@@ -117,7 +117,7 @@ const AdminDashboard = () => {
   const [statusFilter, setStatusFilter] = useState('all');
 
   useEffect(() => {
-    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'users' || activeTab === 'tasks') fetchUsers();
   }, [activeTab]);
 
   const filteredUsers = useMemo(() => {
@@ -173,6 +173,71 @@ const AdminDashboard = () => {
       prependBroadcast(newBroadcast);
       setBroadcastText('');
       setIsSendingBroadcast(false);
+    }
+  };
+
+  // ── Create Tasks ───────────────────────────────────────────────────────────────────
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskPriority, setTaskPriority] = useState('medium');
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [taskSuccess, setTaskSuccess] = useState(null);
+
+  const taskFilteredUsers = useMemo(() => {
+    return users.filter(u =>
+      u.username.toLowerCase().includes(taskSearch.toLowerCase()) ||
+      u.email.toLowerCase().includes(taskSearch.toLowerCase())
+    );
+  }, [users, taskSearch]);
+
+  const handleToggleSelectAll = () => {
+    const visibleIds = taskFilteredUsers.map(u => u.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedUsers.includes(id));
+
+    if (allSelected) {
+      setSelectedUsers(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedUsers(prev => {
+        const next = [...prev];
+        visibleIds.forEach(id => {
+          if (!next.includes(id)) next.push(id);
+        });
+        return next;
+      });
+    }
+  };
+
+  const handleCreateTask = async (e) => {
+    e.preventDefault();
+    if (!taskTitle.trim()) return alert('Task title is required');
+    if (selectedUsers.length === 0) return alert('Please select at least one assignee');
+
+    setIsCreatingTask(true);
+    setTaskSuccess(null);
+
+    try {
+      await axios.post('/api/tasks/bulk', {
+        title: taskTitle,
+        description: taskDescription,
+        priority: taskPriority,
+        dueDate: taskDueDate || null,
+        assignedTo: selectedUsers,
+      });
+
+      setTaskSuccess({ type: 'success', text: 'Task created successfully and assigned!' });
+      setTaskTitle('');
+      setTaskDescription('');
+      setTaskPriority('medium');
+      setTaskDueDate('');
+      setSelectedUsers([]);
+      setTimeout(() => setTaskSuccess(null), 5000);
+    } catch (err) {
+      setTaskSuccess({ type: 'error', text: err.response?.data?.error || 'Failed to create task.' });
+    } finally {
+      setIsCreatingTask(false);
     }
   };
 
@@ -277,6 +342,7 @@ const AdminDashboard = () => {
     { id: 'investments', label: 'All Investments', icon: Zap },
     { id: 'broadcast', label: 'Broadcast News', icon: Megaphone },
     { id: 'chat', label: 'Support Chat', icon: MessageSquare },
+    { id: 'tasks', label: 'Create Tasks', icon: CheckSquare },
   ];
 
   return (
@@ -837,6 +903,163 @@ const AdminDashboard = () => {
                     </div>
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* CREATE TASKS TAB */}
+          {activeTab === 'tasks' && (
+            <div className="fade-in max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h2 className="text-2xl md:text-3xl font-black text-slate-800">Create & Assign Tasks</h2>
+                  <p className="text-slate-500 font-medium mt-1">Assign custom checklist items to your users in bulk.</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-blue-50 text-blue-600">
+                  <CheckSquare className="w-7 h-7" />
+                </div>
+              </div>
+
+              {taskSuccess && (
+                <div className={`p-4 rounded-2xl border text-sm font-bold flex items-center gap-3 animate-fade-in ${
+                  taskSuccess.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+                }`}>
+                  {taskSuccess.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <XCircle className="w-5 h-5 shrink-0" />}
+                  <span>{taskSuccess.text}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                {/* Form controls (3 cols) */}
+                <form onSubmit={handleCreateTask} className="lg:col-span-3 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Task Title *</label>
+                    <input
+                      required
+                      value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                      placeholder="e.g. Complete account tier verification"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 font-medium text-slate-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Description</label>
+                    <textarea
+                      value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      placeholder="Specify task requirements or details..."
+                      rows={4}
+                      className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 font-medium text-slate-700 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Priority</label>
+                      <select
+                        value={taskPriority}
+                        onChange={(e) => setTaskPriority(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 font-bold text-slate-600 bg-white"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Due Date</label>
+                      <input
+                        type="date"
+                        value={taskDueDate}
+                        onChange={(e) => setTaskDueDate(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 font-semibold text-slate-600 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={isCreatingTask}
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-primary to-blue-500 text-white px-6 py-4 rounded-xl font-bold shadow-lg shadow-brand-primary/25 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50"
+                    >
+                      {isCreatingTask ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckSquare className="w-5 h-5" />}
+                      Create and Assign Task ({selectedUsers.length} selected)
+                    </button>
+                  </div>
+                </form>
+
+                {/* Assignees panel (2 cols) */}
+                <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col h-[520px]">
+                  <div className="pb-4 border-b border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <label className="block text-xs font-black uppercase tracking-widest text-slate-400">Assign To ({selectedUsers.length})</label>
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="text-xs font-black text-brand-primary hover:underline uppercase tracking-wider"
+                      >
+                        {taskFilteredUsers.length > 0 && taskFilteredUsers.every(u => selectedUsers.includes(u.id)) ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={taskSearch}
+                        onChange={(e) => setTaskSearch(e.target.value)}
+                        placeholder="Filter users..."
+                        className="pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-primary/30 w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex-grow overflow-y-auto py-4 space-y-2 pr-1 scrollbar-thin">
+                    {taskFilteredUsers.map(u => {
+                      const isSelected = selectedUsers.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-50/50 border-brand-primary/30 shadow-sm'
+                              : 'border-slate-100 hover:bg-slate-50/50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedUsers(prev =>
+                                isSelected ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                              );
+                            }}
+                            className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary/30 border-slate-300"
+                          />
+                          <img
+                            src={`https://ui-avatars.com/api/?name=${u.username}&background=2563eb&color=fff`}
+                            className="w-8 h-8 rounded-full border border-slate-200"
+                            alt={u.username}
+                          />
+                          <div className="min-w-0 flex-grow">
+                            <p className="font-bold text-slate-800 text-xs truncate">{u.username}</p>
+                            <p className="text-[10px] text-slate-400 font-medium truncate">{u.email}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+
+                    {taskFilteredUsers.length === 0 && (
+                      <div className="text-center py-10 text-slate-400 text-xs font-semibold">
+                        No active users found.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
