@@ -32,9 +32,10 @@ const Home = () => {
               <div className="relative">
                 <div className="absolute -inset-4 bg-brand-primary/30 rounded-3xl blur-3xl"></div>
                 <img 
-                  src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=90" 
+                  src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=70" 
                   alt="Professional Trading Dashboard" 
                   className="rounded-3xl shadow-2xl relative z-10 border-8 border-white w-full object-cover h-[350px] md:h-[550px]"
+                  loading="eager"
                 />
               </div>
             </div>
@@ -53,34 +54,34 @@ const Home = () => {
         <div className="relative flex overflow-hidden group">
           <div className="animate-marquee flex whitespace-nowrap py-4">
             {[
-              { name: 'Neural Networks', img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Quantum Servers', img: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Professional Charger', img: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Cloud Infrastructure', img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Global Data Sync', img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Edge Computing', img: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Secure Blockchains', img: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=600&q=80' }
+              { name: 'Neural Networks', img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Quantum Servers', img: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Professional Charger', img: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Cloud Infrastructure', img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Global Data Sync', img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Edge Computing', img: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Secure Blockchains', img: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=400&q=50' }
             ].map((tool, i) => (
               <div key={i} className="flex flex-col items-center mx-10">
                 <div className="w-96 h-64 rounded-3xl overflow-hidden shadow-2xl border-4 border-white transition-all duration-700 hover:scale-110 hover:rotate-2">
-                  <img src={tool.img} alt={tool.name} className="w-full h-full object-cover" />
+                  <img src={tool.img} alt={tool.name} className="w-full h-full object-cover" loading="lazy" />
                 </div>
                 <span className="mt-6 text-2xl font-bold text-brand-text bg-white px-6 py-2 rounded-full shadow-sm">{tool.name}</span>
               </div>
             ))}
             {/* Duplicate for seamless loop */}
             {[
-              { name: 'Neural Networks', img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Quantum Servers', img: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Professional Charger', img: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Cloud Infrastructure', img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Global Data Sync', img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Edge Computing', img: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80' },
-              { name: 'Secure Blockchains', img: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=600&q=80' }
+              { name: 'Neural Networks', img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Quantum Servers', img: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Professional Charger', img: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Cloud Infrastructure', img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Global Data Sync', img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Edge Computing', img: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=50' },
+              { name: 'Secure Blockchains', img: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=400&q=50' }
             ].map((tool, i) => (
               <div key={`dup-${i}`} className="flex flex-col items-center mx-10">
                 <div className="w-96 h-64 rounded-3xl overflow-hidden shadow-2xl border-4 border-white transition-all duration-700 hover:scale-110 hover:rotate-2">
-                  <img src={tool.img} alt={tool.name} className="w-full h-full object-cover" />
+                  <img src={tool.img} alt={tool.name} className="w-full h-full object-cover" loading="lazy" />
                 </div>
                 <span className="mt-6 text-2xl font-bold text-brand-text bg-white px-6 py-2 rounded-full shadow-sm">{tool.name}</span>
               </div>
@@ -104,18 +105,18 @@ const Home = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
-              { name: 'Anti-Static Strap', price: '$2.00', img: 'https://images.unsplash.com/photo-1591405351990-4726e331f141?auto=format&fit=crop&w=400&q=80' },
-              { name: 'Professional Charger', price: '$25.00', img: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=400&q=80' },
-              { name: 'USB Secure Drive', price: '$15.00', img: 'https://images.unsplash.com/photo-1588127333419-b9d7de223dcf?auto=format&fit=crop&w=400&q=80' },
-              { name: 'Trading Mouse', price: '$45.00', img: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?auto=format&fit=crop&w=400&q=80' },
-              { name: 'Hardware Wallet', price: '$95.00', img: 'https://images.unsplash.com/photo-1634733988138-bf2c3a2a13fa?auto=format&fit=crop&w=400&q=80' },
-              { name: 'Mechanical Key', price: '$125.00', img: 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?auto=format&fit=crop&w=400&q=80' },
-              { name: 'Triple Monitor', price: '$499.00', img: 'https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=400&q=80' },
-              { name: 'Workstation Pro', price: '$850.00', img: 'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=400&q=80' }
+              { name: 'Anti-Static Strap', price: '$2.00', img: 'https://images.unsplash.com/photo-1591405351990-4726e331f141?auto=format&fit=crop&w=300&q=50' },
+              { name: 'Professional Charger', price: '$25.00', img: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=300&q=50' },
+              { name: 'USB Secure Drive', price: '$15.00', img: 'https://images.unsplash.com/photo-1588127333419-b9d7de223dcf?auto=format&fit=crop&w=300&q=50' },
+              { name: 'Trading Mouse', price: '$45.00', img: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?auto=format&fit=crop&w=300&q=50' },
+              { name: 'Hardware Wallet', price: '$95.00', img: 'https://images.unsplash.com/photo-1634733988138-bf2c3a2a13fa?auto=format&fit=crop&w=300&q=50' },
+              { name: 'Mechanical Key', price: '$125.00', img: 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?auto=format&fit=crop&w=300&q=50' },
+              { name: 'Triple Monitor', price: '$499.00', img: 'https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=300&q=50' },
+              { name: 'Workstation Pro', price: '$850.00', img: 'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=300&q=50' }
             ].map((item, i) => (
               <div key={i} className="group card hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border-brand-border">
                 <div className="relative h-48 mb-6 rounded-xl overflow-hidden shadow-inner bg-gray-50">
-                  <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-brand-primary font-bold shadow-md">
                     {item.price}
                   </div>

@@ -10,7 +10,7 @@ const seed = async () => {
     const existing = await User.findOne({ where: { email: ceoEmail } });
 
     if (!existing) {
-      const hashed = await bcrypt.hash(process.env.CEO_PASSWORD || 'Admin@123456', 12);
+      const hashed = await bcrypt.hash(process.env.CEO_PASSWORD || 'Admin@123456', 10);
       await User.create({
         username: process.env.CEO_USERNAME || 'CEO',
         email: ceoEmail,
@@ -22,8 +22,10 @@ const seed = async () => {
       });
       logger.info(`✅ CEO admin account seeded → ${ceoEmail}`);
     } else {
-      await existing.update({ role: 'Admin' });
-      logger.info('ℹ️  CEO account role synced to Admin.');
+      if (existing.role !== 'Admin') {
+        await existing.update({ role: 'Admin' });
+        logger.info('ℹ️  CEO account role synced to Admin.');
+      }
     }
 
     // ── Admin account ─────────────────────────────────────────────────────────
@@ -31,7 +33,7 @@ const seed = async () => {
     const adminExists = await User.findOne({ where: { email: adminEmail } });
 
     if (!adminExists) {
-      const hashed = await bcrypt.hash('Admin@123456', 12);
+      const hashed = await bcrypt.hash('Admin@123456', 10);
       await User.create({
         username: 'Admin',
         email: adminEmail,
@@ -43,13 +45,15 @@ const seed = async () => {
       });
       logger.info(`✅ Admin account seeded → ${adminEmail}`);
     } else {
-      await adminExists.update({ role: 'Admin' });
+      if (adminExists.role !== 'Admin') {
+        await adminExists.update({ role: 'Admin' });
+      }
     }
 
     // ── Test Admin: ishimwe ───────────────────────────────────────────────────
     const ishimweExists = await User.findOne({ where: { username: 'ishimwe' } });
     if (!ishimweExists) {
-      const hashed = await bcrypt.hash('passd123', 12);
+      const hashed = await bcrypt.hash('passd123', 10);
       await User.create({
         username: 'ishimwe',
         email: 'ishimwe@invest.com',
@@ -61,15 +65,17 @@ const seed = async () => {
       });
       logger.info('✅ Test Admin seeded → ishimwe');
     } else {
-      const hashed = await bcrypt.hash('passd123', 12);
-      await ishimweExists.update({ password: hashed, role: 'Admin', status: 'active' });
-      logger.info('ℹ️  ishimwe account updated (role=Admin, password synced).');
+      if (ishimweExists.role !== 'Admin' || ishimweExists.status !== 'active') {
+        const hashed = await bcrypt.hash('passd123', 10);
+        await ishimweExists.update({ password: hashed, role: 'Admin', status: 'active' });
+        logger.info('ℹ️  ishimwe account updated (role=Admin, password synced).');
+      }
     }
 
     // ── Test Client: jeremie ──────────────────────────────────────────────────
     const jeremieExists = await User.findOne({ where: { username: 'jeremie' } });
     if (!jeremieExists) {
-      const hashed = await bcrypt.hash('passd123', 12);
+      const hashed = await bcrypt.hash('passd123', 10);
       await User.create({
         username: 'jeremie',
         email: 'jeremie@invest.com',
@@ -81,9 +87,11 @@ const seed = async () => {
       });
       logger.info('✅ Test Client seeded → jeremie');
     } else {
-      const hashed = await bcrypt.hash('passd123', 12);
-      await jeremieExists.update({ password: hashed, role: 'Client', status: 'active' });
-      logger.info('ℹ️  jeremie account updated (role=Client, password synced).');
+      if (jeremieExists.role !== 'Client' || jeremieExists.status !== 'active') {
+        const hashed = await bcrypt.hash('passd123', 10);
+        await jeremieExists.update({ password: hashed, role: 'Client', status: 'active' });
+        logger.info('ℹ️  jeremie account updated (role=Client, password synced).');
+      }
     }
 
   } catch (err) {

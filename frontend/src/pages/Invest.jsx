@@ -106,7 +106,7 @@ const Invest = () => {
       type: 'Core Cloud Instance', 
       price: '$15.00', 
       profit: '$0.65', 
-      img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80',
+      img: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=350&q=50',
       badge: 'Popular',
       color: 'border-blue-400'
     },
@@ -115,7 +115,7 @@ const Invest = () => {
       type: 'Neural Compute Unit', 
       price: '$50.00', 
       profit: '$2.50', 
-      img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=400&q=80',
+      img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=350&q=50',
       badge: 'Advanced',
       color: 'border-blue-600'
     },
@@ -124,7 +124,7 @@ const Invest = () => {
       type: 'Quantum Core', 
       price: '$150.00', 
       profit: '$8.50', 
-      img: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80',
+      img: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=350&q=50',
       badge: 'Professional',
       color: 'border-purple-400'
     },
@@ -133,7 +133,7 @@ const Invest = () => {
       type: 'Global Sync Node', 
       price: '$500.00', 
       profit: '$32.00', 
-      img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=400&q=80',
+      img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=350&q=50',
       badge: 'Elite',
       color: 'border-purple-600'
     },
@@ -142,7 +142,7 @@ const Invest = () => {
       type: 'Tera Data Center', 
       price: '$1,500.00', 
       profit: '$105.00', 
-      img: 'https://images.unsplash.com/photo-1516383274235-5f42d6c6426d?auto=format&fit=crop&w=400&q=80',
+      img: 'https://images.unsplash.com/photo-1516383274235-5f42d6c6426d?auto=format&fit=crop&w=350&q=50',
       badge: 'Prestige',
       color: 'border-purple-800'
     },
@@ -151,7 +151,7 @@ const Invest = () => {
       type: 'Infinite ICT Hub', 
       price: '$5,000.00', 
       profit: '$420.00', 
-      img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80',
+      img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=350&q=50',
       badge: 'Legendary',
       color: 'border-brand-primary'
     },
@@ -188,7 +188,7 @@ const Invest = () => {
           {products.map((p, i) => (
             <div key={i} className={`bg-white rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition duration-500 border-2 ${p.color} flex flex-col group`}>
               <div className="relative h-32 sm:h-40 md:h-48 overflow-hidden">
-                <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" />
+                <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" loading="lazy" />
                 <div className="absolute top-4 right-4">
                    <span className="bg-white/90 backdrop-blur px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-800 shadow-sm">{p.badge}</span>
                 </div>

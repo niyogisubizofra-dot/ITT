@@ -36,8 +36,8 @@ const start = async () => {
     }
 
     if (process.env.NODE_ENV !== 'production') {
-      await sequelize.sync({ alter: true });
-      logger.info('✅ Database synced (alter mode — dev only).');
+      await sequelize.sync({ alter: false });
+      logger.info('✅ Database synced (create-if-missing mode — dev).');
       // Seed default data in development only
       const seed = require('./src/seeders/defaultSeed');
       await seed();

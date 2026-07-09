@@ -32,9 +32,10 @@ const About = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
             <div className="relative h-[500px] rounded-[3rem] overflow-hidden shadow-2xl border border-slate-100">
               <img 
-                src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=90" 
+                src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=70" 
                 alt="ICT Profit Interface" 
                 className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-brand-dark/90 to-transparent flex items-end p-10">
                  <div>
