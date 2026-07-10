@@ -301,7 +301,7 @@ exports.uploadChatFile = async (req, res, next) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     res.status(201).json({
-      fileUrl: `uploads/${req.file.filename}`,
+      fileUrl: req.file.cloudinaryUrl || `uploads/${req.file.filename}`,
       fileName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,

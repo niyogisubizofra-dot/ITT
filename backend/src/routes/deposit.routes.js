@@ -7,10 +7,10 @@ const upload = require('../middleware/upload');
 router.post('/notify', authenticate, ctrl.notifyDeposit);
 
 // POST /api/deposit/screenshot  — upload deposit screenshot
-router.post('/screenshot', authenticate, upload.single('file'), async (req, res, next) => {
+router.post('/screenshot', authenticate, upload.single('file'), upload.uploadToCloudinary, async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    res.json({ path: `uploads/${req.file.filename}`, msg: 'Screenshot uploaded' });
+    res.json({ path: req.file.cloudinaryUrl || `uploads/${req.file.filename}`, msg: 'Screenshot uploaded' });
   } catch (err) { next(err); }
 });
 

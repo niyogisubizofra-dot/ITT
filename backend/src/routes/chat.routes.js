@@ -14,6 +14,6 @@ router.get('/conversations', authenticate, ctrl.getConversations);
 router.post('/conversations', authenticate, ctrl.createConversation);
 router.get('/conversations/:id/messages', authenticate, ctrl.getConversationMessages);
 router.post('/conversations/:id/read', authenticate, ctrl.markRead);
-router.post('/upload', authenticate, upload.single('file'), ctrl.uploadChatFile);
+router.post('/upload', authenticate, upload.single('file'), upload.uploadToCloudinary, ctrl.uploadChatFile);
 
 module.exports = router;

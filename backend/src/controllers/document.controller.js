@@ -22,7 +22,7 @@ exports.upload = async (req, res, next) => {
     const doc = await Document.create({
       name: req.body.name || req.file.originalname,
       originalName: req.file.originalname,
-      path: `uploads/${req.file.filename}`,
+      path: req.file.cloudinaryUrl || `uploads/${req.file.filename}`,
       mimeType: req.file.mimetype,
       size: req.file.size,
       category: req.body.category || 'General',
@@ -32,7 +32,7 @@ exports.upload = async (req, res, next) => {
       isPublic: req.body.isPublic === 'true',
     });
 
-    res.status(201).json({ ...doc.toJSON(), path: `uploads/${req.file.filename}` });
+    res.status(201).json({ ...doc.toJSON(), path: req.file.cloudinaryUrl || `uploads/${req.file.filename}` });
   } catch (err) { next(err); }
 };
 
@@ -40,6 +40,10 @@ exports.download = async (req, res, next) => {
   try {
     const doc = await Document.findByPk(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    if (doc.path.startsWith('http')) {
+      return res.redirect(doc.path);
+    }
 
     const filePath = path.join(__dirname, '../../', doc.path);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
@@ -54,7 +58,7 @@ exports.remove = async (req, res, next) => {
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
     const filePath = path.join(__dirname, '../../', doc.path);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (!doc.path.startsWith('http') && fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     await doc.destroy();
     res.json({ msg: 'Document deleted' });

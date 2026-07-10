@@ -6,7 +6,8 @@ import {
   MessageSquare, Clock, CheckCircle2, 
   Wallet, TrendingUp, DollarSign, CreditCard,
   ArrowRight, Home, Menu, X, Users, Share2, Copy, Check, Zap,
-  Image, Paperclip, Bold, Italic, Link2, Send, Loader2
+  Image, Paperclip, Bold, Italic, Link2, Send, Loader2,
+  Calendar, Shield, Phone, Mail, Search, ArrowUpDown, Briefcase
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -35,6 +36,11 @@ const Dashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [profileSummary, setProfileSummary] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [searchReferral, setSearchReferral] = useState('');
+  const [sortReferralKey, setSortReferralKey] = useState('username');
+  const [sortReferralDir, setSortReferralDir] = useState('asc');
 
   const fetchNotifications = async () => {
     setNotificationsLoading(true);
@@ -90,6 +96,17 @@ const Dashboard = () => {
         });
     } else if (activeTab === 'notifications') {
       fetchNotifications();
+    } else if (activeTab === 'profile') {
+      setProfileLoading(true);
+      axios.get('/api/users/profile-summary')
+        .then(res => {
+          setProfileSummary(res.data);
+          setProfileLoading(false);
+        })
+        .catch(err => {
+          console.error('Failed to fetch profile summary', err);
+          setProfileLoading(false);
+        });
     }
   }, [activeTab]);
 
@@ -355,6 +372,43 @@ const Dashboard = () => {
       console.error('Deposit failed', err);
     }
   };
+
+  const processedReferrals = (() => {
+    if (!profileSummary?.referrals?.referralList) return [];
+    
+    let list = [...profileSummary.referrals.referralList];
+
+    // Filter
+    if (searchReferral.trim()) {
+      const q = searchReferral.toLowerCase();
+      list = list.filter(r => 
+        (r.name && r.name.toLowerCase().includes(q)) || 
+        r.username.toLowerCase().includes(q)
+      );
+    }
+
+    // Sort
+    list.sort((a, b) => {
+      let valA = a[sortReferralKey];
+      let valB = b[sortReferralKey];
+
+      // Handle nulls
+      if (valA === null || valA === undefined) valA = '';
+      if (valB === null || valB === undefined) valB = '';
+
+      if (typeof valA === 'string') {
+        return sortReferralDir === 'asc' 
+          ? valA.localeCompare(valB) 
+          : valB.localeCompare(valA);
+      } else {
+        return sortReferralDir === 'asc' 
+          ? valA - valB 
+          : valB - valA;
+      }
+    });
+
+    return list;
+  })();
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans fixed inset-0 z-50">
@@ -1135,6 +1189,366 @@ const Dashboard = () => {
                      </div>
                   </div>
                </div>
+            </div>
+          )}
+
+          {activeTab === 'profile' && profileLoading && (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary"></div>
+            </div>
+          )}
+
+          {activeTab === 'profile' && !profileLoading && profileSummary && (
+            <div className="fade-in space-y-8">
+              {/* User Information Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="bg-brand-primary/10 p-4 rounded-full text-brand-primary">
+                    <User className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-800">User Profile</h2>
+                    <p className="text-slate-400 font-medium">Verify your registration details and credentials</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Full Name</span>
+                    <span className="text-base font-black text-slate-800">{profileSummary.profile.fullName || 'Not Provided'}</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Username</span>
+                    <span className="text-base font-black text-slate-800">{profileSummary.profile.username}</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Email Address</span>
+                    <span className="text-base font-black text-slate-800 flex items-center">
+                      <Mail className="w-4 h-4 mr-2 text-slate-400" />
+                      {profileSummary.profile.email}
+                    </span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Phone Number</span>
+                    <span className="text-base font-black text-slate-800 flex items-center">
+                      <Phone className="w-4 h-4 mr-2 text-slate-400" />
+                      {profileSummary.profile.phone || 'Not Provided'}
+                    </span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Role / Account Tier</span>
+                    <span className="text-base font-black text-slate-800">{profileSummary.profile.role}</span>
+                  </div>
+                  {profileSummary.profile.department && (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Department</span>
+                      <span className="text-base font-black text-slate-800 flex items-center">
+                        <Briefcase className="w-4 h-4 mr-2 text-slate-400" />
+                        {profileSummary.profile.department}
+                      </span>
+                    </div>
+                  )}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Account Status</span>
+                    <span className={`inline-block px-2.5 py-0.5 text-xs font-black uppercase tracking-wider rounded-full ${
+                      profileSummary.profile.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {profileSummary.profile.status}
+                    </span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Member Since</span>
+                    <span className="text-base font-black text-slate-800 flex items-center">
+                      <Calendar className="w-4 h-4 mr-2 text-slate-400" />
+                      {new Date(profileSummary.profile.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Last Login Session</span>
+                    <span className="text-base font-black text-slate-800 flex items-center">
+                      <Clock className="w-4 h-4 mr-2 text-slate-400" />
+                      {profileSummary.profile.lastLogin ? new Date(profileSummary.profile.lastLogin).toLocaleString() : 'First Session'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Investment Summary Section */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
+                <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center">
+                  <Zap className="w-6 h-6 mr-2 text-yellow-500" /> Investment Portfolio Summary
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Total Invested</span>
+                    <span className="text-2xl font-black text-slate-800">${profileSummary.investments.totalInvested.toFixed(2)}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Active Nodes</span>
+                    <span className="text-2xl font-black text-slate-800">{profileSummary.investments.activeCount}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Projected Returns (30d)</span>
+                    <span className="text-2xl font-black text-emerald-600">${profileSummary.investments.expectedReturns.toFixed(2)}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Total Earnings Claimed</span>
+                    <span className="text-2xl font-black text-slate-800">${profileSummary.investments.totalEarnings.toFixed(2)}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Portfolio Status</span>
+                    <span className={`inline-block px-3 py-1 text-sm font-black uppercase rounded-lg ${
+                      profileSummary.investments.currentStatus === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {profileSummary.investments.currentStatus}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <h4 className="font-bold text-slate-800 mb-4">Recent Investment Plans</h4>
+                  {profileSummary.investments.recentInvestments.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500 font-medium bg-slate-50 rounded-xl border border-dashed">
+                      No active investments found. Click "Invest" in the header to start.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          <th className="py-3 px-4">Investment Plan</th>
+                          <th className="py-3 px-4">Amount</th>
+                          <th className="py-3 px-4">Daily Yield</th>
+                          <th className="py-3 px-4">Profit Earned</th>
+                          <th className="py-3 px-4">Start Date</th>
+                          <th className="py-3 px-4">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profileSummary.investments.recentInvestments.map((inv, idx) => (
+                          <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition text-sm">
+                            <td className="py-4 px-4 font-black text-slate-800">{inv.plan}</td>
+                            <td className="py-4 px-4 font-bold text-slate-800">${inv.amount.toFixed(2)}</td>
+                            <td className="py-4 px-4 font-bold text-emerald-600">+${inv.dailyProfit.toFixed(2)}</td>
+                            <td className="py-4 px-4 font-bold text-slate-800">${inv.totalProfit.toFixed(2)}</td>
+                            <td className="py-4 px-4 font-medium text-slate-500">{new Date(inv.startDate).toLocaleDateString()}</td>
+                            <td className="py-4 px-4">
+                              <span className={`inline-block px-2 py-0.5 text-xs font-black uppercase rounded ${
+                                inv.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {inv.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Referral Summary Section */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
+                <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center">
+                  <Users className="w-6 h-6 mr-2 text-blue-500" /> Referral Network Summary
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Total Referrals</span>
+                    <span className="text-2xl font-black text-slate-800">{profileSummary.referrals.totalReferrals}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Active Referrals</span>
+                    <span className="text-2xl font-black text-emerald-600">{profileSummary.referrals.activeReferrals}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Pending Referrals</span>
+                    <span className="text-2xl font-black text-slate-800">{profileSummary.referrals.pendingReferrals}</span>
+                  </div>
+                  <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="block text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Referral Commissions</span>
+                    <span className="text-2xl font-black text-slate-800">${profileSummary.referrals.totalCommissions.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Referral Table with search/sort */}
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <h4 className="font-bold text-slate-800">My Referral List</h4>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search referrals..."
+                        value={searchReferral}
+                        onChange={(e) => setSearchReferral(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                      />
+                    </div>
+                  </div>
+
+                  {processedReferrals.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 font-medium bg-slate-50 rounded-xl border border-dashed">
+                      No matching referrals found.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            <th className="py-3 px-4">
+                              <button onClick={() => {
+                                setSortReferralKey('name');
+                                setSortReferralDir(sortReferralDir === 'asc' ? 'desc' : 'asc');
+                              }} className="flex items-center hover:text-slate-600 font-bold">
+                                Full Name <ArrowUpDown className="ml-1 w-3.5 h-3.5" />
+                              </button>
+                            </th>
+                            <th className="py-3 px-4">
+                              <button onClick={() => {
+                                setSortReferralKey('username');
+                                setSortReferralDir(sortReferralDir === 'asc' ? 'desc' : 'asc');
+                              }} className="flex items-center hover:text-slate-600 font-bold">
+                                Username <ArrowUpDown className="ml-1 w-3.5 h-3.5" />
+                              </button>
+                            </th>
+                            <th className="py-3 px-4">
+                              <button onClick={() => {
+                                setSortReferralKey('level');
+                                setSortReferralDir(sortReferralDir === 'asc' ? 'desc' : 'asc');
+                              }} className="flex items-center hover:text-slate-600 font-bold">
+                                Level <ArrowUpDown className="ml-1 w-3.5 h-3.5" />
+                              </button>
+                            </th>
+                            <th className="py-3 px-4">
+                              <button onClick={() => {
+                                setSortReferralKey('registrationDate');
+                                setSortReferralDir(sortReferralDir === 'asc' ? 'desc' : 'asc');
+                              }} className="flex items-center hover:text-slate-600 font-bold">
+                                Registration Date <ArrowUpDown className="ml-1 w-3.5 h-3.5" />
+                              </button>
+                            </th>
+                            <th className="py-3 px-4 font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                            <th className="py-3 px-4">
+                              <button onClick={() => {
+                                setSortReferralKey('totalInvested');
+                                setSortReferralDir(sortReferralDir === 'asc' ? 'desc' : 'asc');
+                              }} className="flex items-center hover:text-slate-600 font-bold">
+                                Total Invested <ArrowUpDown className="ml-1 w-3.5 h-3.5" />
+                              </button>
+                            </th>
+                            <th className="py-3 px-4">
+                              <button onClick={() => {
+                                setSortReferralKey('commissionEarned');
+                                setSortReferralDir(sortReferralDir === 'asc' ? 'desc' : 'asc');
+                              }} className="flex items-center hover:text-slate-600 font-bold">
+                                Commissions <ArrowUpDown className="ml-1 w-3.5 h-3.5" />
+                              </button>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {processedReferrals.map((ref, idx) => (
+                            <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition text-sm">
+                              <td className="py-4 px-4 font-bold text-slate-800">{ref.name || 'Not Provided'}</td>
+                              <td className="py-4 px-4 font-medium text-slate-600">@{ref.username}</td>
+                              <td className="py-4 px-4 font-bold text-slate-800">
+                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-black uppercase ${
+                                  ref.level === 1 ? 'bg-blue-100 text-blue-800' :
+                                  ref.level === 2 ? 'bg-emerald-100 text-emerald-800' :
+                                  'bg-purple-100 text-purple-800'
+                                }`}>
+                                  Lvl {ref.level}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 font-medium text-slate-500">{new Date(ref.registrationDate).toLocaleDateString()}</td>
+                              <td className="py-4 px-4">
+                                <span className={`inline-block px-2 py-0.5 text-xs font-bold uppercase rounded-full ${
+                                  ref.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {ref.status}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 font-black text-slate-800">${ref.totalInvested.toFixed(2)}</td>
+                              <td className="py-4 px-4 font-black text-emerald-600">+${ref.commissionEarned.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Account Activity Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Security and Login Audit Logs */}
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                  <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-slate-400" /> Account Security & Audit Logs
+                  </h3>
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                    {profileSummary.activity.logs.length === 0 ? (
+                      <div className="text-center py-10 text-slate-500 font-medium">No activity log records.</div>
+                    ) : (
+                      profileSummary.activity.logs.map((log, idx) => (
+                        <div key={idx} className="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition flex items-start space-x-3 text-sm">
+                          <div className="p-2 bg-slate-100 rounded-lg text-slate-500 shrink-0">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="block font-bold text-slate-800">{log.action}</span>
+                            <span className="text-xs text-slate-400 font-bold block mt-1">
+                              {new Date(log.createdAt).toLocaleString()} • IP: {log.ipAddress}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium line-clamp-1 truncate mt-0.5">
+                              {log.userAgent}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Financial Transactions history */}
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+                  <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
+                    <CreditCard className="w-5 h-5 mr-2 text-slate-400" /> Recent Financial History
+                  </h3>
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                    {profileSummary.activity.transactions.length === 0 ? (
+                      <div className="text-center py-10 text-slate-500 font-medium">No financial transactions found.</div>
+                    ) : (
+                      profileSummary.activity.transactions.map((t, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition text-sm">
+                          <div className="flex items-center space-x-3">
+                            <div className={`p-2.5 rounded-full flex shrink-0 ${
+                              t.status === 'completed' || t.status === 'approved' ? 'bg-emerald-100 text-emerald-600' :
+                              t.status === 'pending' ? 'bg-yellow-100 text-yellow-600' :
+                              'bg-red-100 text-red-600'
+                            }`}>
+                              {t.type === 'deposit' ? <DollarSign className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <span className="block font-bold text-slate-800">{t.description || t.type.toUpperCase()}</span>
+                              <span className="text-xs text-slate-400 font-bold block mt-1">
+                                {new Date(t.createdAt).toLocaleString()} • {t.reference}
+                              </span>
+                            </div>
+                          </div>
+                          <span className={`font-black pl-3 ${
+                            t.type === 'profit' || t.type === 'referral_bonus' || t.type === 'commission' || t.type === 'deposit' ? 'text-emerald-500' : 'text-slate-800'
+                          }`}>
+                            {t.type === 'profit' || t.type === 'referral_bonus' || t.type === 'commission' || t.type === 'deposit' ? '+' : '-'}${t.amount.toFixed(2)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

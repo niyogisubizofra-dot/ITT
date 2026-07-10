@@ -2,6 +2,9 @@ const router = require('express').Router();
 const ctrl = require('../controllers/user.controller');
 const { authenticate, adminOnly } = require('../middleware/auth');
 
+router.get('/profile-summary', authenticate, ctrl.getProfileSummary);
+router.get('/profile-summary/:id', authenticate, ctrl.getProfileSummary);
+
 router.use(authenticate, adminOnly);
 
 router.get('/', ctrl.getAll);
