@@ -1,0 +1,107 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  :root {
+    --color-bg: #ffffff;
+    --color-bg-secondary: #f0f9ff;
+    --color-text: #1e3a8a;
+    --color-text-muted: #3b82f6;
+    --color-border: #bae6fd;
+  }
+  
+  :root.dark {
+    --color-bg: #0c4a6e;
+    --color-bg-secondary: #075985;
+    --color-text: #f0f9ff;
+    --color-text-muted: #bae6fd;
+    --color-border: #0369a1;
+  }
+
+  body {
+    @apply bg-brand-dark text-brand-text font-sans antialiased transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-primary hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50;
+  }
+  .btn-secondary {
+    @apply bg-white hover:bg-brand-secondary text-brand-primary font-semibold py-2 px-4 rounded-lg transition duration-300 ease-in-out border-2 border-brand-primary shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-primary/50;
+  }
+  .input-field {
+    @apply w-full bg-brand-dark border border-brand-border rounded-lg py-3 px-4 text-brand-text focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition duration-200;
+  }
+  .card {
+    @apply bg-brand-secondary/90 rounded-xl p-6 shadow-xl border border-brand-border backdrop-blur-sm;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f0f9ff; 
+}
+::-webkit-scrollbar-thumb {
+  background: #bae6fd; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6; 
+}
+
+/* Animations */
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+
+.text-3d {
+  text-shadow: 
+    1px 1px 0px #3b82f6, 
+    2px 2px 0px #2563eb, 
+    3px 3px 0px #1d4ed8, 
+    4px 4px 0px #1e40af, 
+    5px 5px 0px #1e3a8a, 
+    6px 6px 0px #172554,
+    15px 15px 30px rgba(0,0,0,0.4);
+}
+
+@keyframes slideRightToLeft {
+  0% { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-slide-rtl {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+  animation: slideRightToLeft 15s linear infinite;
+}
+
+.animate-marquee:hover, .animate-slide-rtl:hover {
+  animation-play-state: paused;
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(100px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

@@ -1,0 +1,45 @@
+services:
+  # ── Backend API (Node/Express) ────────────────────────────────────────────────
+  - type: web
+    name: invest-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install --legacy-peer-deps
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false          # Set manually in Render dashboard
+      - key: CLIENT_URL
+        sync: false          # Set to your Vercel frontend URL after deploy
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: CEO_EMAIL
+        value: ceo@invest.com
+      - key: CEO_PASSWORD
+        sync: false          # Set a strong password manually
+      - key: CEO_USERNAME
+        value: CEO
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false          # Set your Gmail address manually
+      - key: SMTP_PASS
+        sync: false          # Set your Gmail App Password manually
+      - key: EMAIL_FROM
+        value: noreply@invest.com
+      - key: UPLOAD_MAX_SIZE
+        value: 10485760
